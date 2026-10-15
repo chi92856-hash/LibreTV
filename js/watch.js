@@ -46,7 +46,7 @@ window.onload = function() {
     let returnUrl = '';
     if (backUrl) {
         // 有显式指定的返回URL
-        returnUrl = decodeURIComponent(backUrl);
+        returnUrl = backUrl;
     } else if (referrer && (referrer.includes('/s=') || referrer.includes('?s='))) {
         // 来源是搜索页面
         returnUrl = referrer;
@@ -60,7 +60,7 @@ window.onload = function() {
     
     // 将返回URL添加到player.html的参数中
     if (!playerUrlObj.searchParams.has('returnUrl')) {
-        playerUrlObj.searchParams.set('returnUrl', encodeURIComponent(returnUrl));
+        playerUrlObj.searchParams.set('returnUrl', returnUrl);
     }
     
     // 同时保存在localStorage中，作为备用
@@ -89,6 +89,7 @@ window.onload = function() {
     // 重定向到播放器页面
     setTimeout(() => {
         clearInterval(statusInterval);
-        window.location.href = finalPlayerUrl;
+        window.location.replace(finalPlayerUrl);
     }, 2800); // 稍微早于meta refresh的时间，确保我们的JS控制重定向
 };
+

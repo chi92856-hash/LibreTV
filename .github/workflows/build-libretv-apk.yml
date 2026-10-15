@@ -1,0 +1,134 @@
+name: Build LibreTV Android APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-libretv-apk.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Generate Android project
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/app/libretv
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = 'LibreTV'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'app.libretv'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'app.libretv.chi'
+                  minSdk 24
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <application android:label="LibreTV" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+              <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
+                <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+          cat > app/src/main/java/app/libretv/MainActivity.java <<'EOF'
+          package app.libretv;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.ViewGroup;
+          import android.webkit.*;
+          import android.widget.FrameLayout;
+          public class MainActivity extends Activity {
+            private WebView web;
+            private FrameLayout root;
+            private View fullscreen;
+            private WebChromeClient.CustomViewCallback callback;
+            @Override public void onCreate(Bundle state) {
+              super.onCreate(state);
+              root = new FrameLayout(this);
+              setContentView(root);
+              web = new WebView(this);
+              root.addView(web, new FrameLayout.LayoutParams(-1,-1));
+              WebSettings settings = web.getSettings();
+              settings.setJavaScriptEnabled(true);
+              settings.setDomStorageEnabled(true);
+              settings.setMediaPlaybackRequiresUserGesture(false);
+              settings.setAllowFileAccess(false);
+              settings.setAllowContentAccess(false);
+              web.setWebViewClient(new WebViewClient());
+              web.setWebChromeClient(new WebChromeClient() {
+                @Override public void onShowCustomView(View view, CustomViewCallback cb) {
+                  if (fullscreen != null) { cb.onCustomViewHidden(); return; }
+                  fullscreen = view; callback = cb;
+                  web.setVisibility(View.GONE);
+                  root.addView(view,new FrameLayout.LayoutParams(-1,-1));
+                  getWindow().getDecorView().setSystemUiVisibility(5894);
+                }
+                @Override public void onHideCustomView() { exitFullscreen(); }
+              });
+              if (state == null || web.restoreState(state) == null)
+                web.loadUrl("https://libretv-chi-am3.pages.dev/");
+            }
+            private void exitFullscreen() {
+              if (fullscreen == null) return;
+              root.removeView(fullscreen); fullscreen = null;
+              web.setVisibility(View.VISIBLE);
+              getWindow().getDecorView().setSystemUiVisibility(0);
+              if (callback != null) { callback.onCustomViewHidden(); callback = null; }
+            }
+            @Override public void onBackPressed() {
+              if (fullscreen != null) exitFullscreen();
+              else if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+            }
+            @Override protected void onSaveInstanceState(Bundle state) {
+              web.saveState(state); super.onSaveInstanceState(state);
+            }
+            @Override protected void onPause() { web.onPause(); super.onPause(); }
+            @Override protected void onResume() { super.onResume(); web.onResume(); }
+            @Override protected void onDestroy() {
+              root.removeAllViews(); web.destroy(); super.onDestroy();
+            }
+          }
+          EOF
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+      - name: Verify and package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/LibreTV.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/LibreTV.apk
+          sha256sum dist/LibreTV.apk > dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LibreTV-Android-APK
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+

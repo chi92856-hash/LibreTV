@@ -1,4 +1,24 @@
 // UI相关函数
+function inlineJsArgument(value) {
+    return JSON.stringify(String(value)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+async function copyTextToClipboard(text) {
+    const previous = document.activeElement;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try { await navigator.clipboard.writeText(text); return; } catch (_) {}
+        }
+        const input = document.createElement('textarea');
+        input.value = text;
+        input.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(input);
+        try {
+            input.select();
+            if (!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+        } finally { input.remove(); }
+    } finally { if (previous && previous.focus) previous.focus(); }
+}
+
 function toggleSettings(e) {
     // 强化的密码保护校验 - 防止绕过
     try {
@@ -138,6 +158,8 @@ function closeModal() {
     document.getElementById('modal').classList.add('hidden');
     // 清除 iframe 内容
     document.getElementById('modalContent').innerHTML = '';
+    const savedFocus = document.getElementById(document.getElementById('modal').dataset.returnFocus);
+    if (savedFocus) savedFocus.focus();
 }
 
 // 获取搜索历史的增强版本 - 支持新旧格式
@@ -237,14 +259,17 @@ function renderSearchHistory() {
     `;
 
     history.forEach(item => {
-        const tag = document.createElement('button');
+        const tag = document.createElement('div');
         tag.className = 'search-tag flex items-center gap-1';
-        const textSpan = document.createElement('span');
+        const textSpan = document.createElement('button');
+        textSpan.type = 'button';
         textSpan.textContent = item.text;
         tag.appendChild(textSpan);
 
         // 添加删除按钮
-        const deleteButton = document.createElement('span');
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.setAttribute('aria-label', '删除此搜索记录');
         deleteButton.className = 'pl-1 text-gray-500 hover:text-red-500 transition-colors';
         deleteButton.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
         deleteButton.onclick = function(e) {
@@ -437,8 +462,8 @@ function loadViewingHistory() {
 
         // 构建历史记录项HTML，添加删除按钮，需要放在position:relative的容器中
         return `
-            <div class="history-item cursor-pointer relative group" onclick="playFromHistory('${item.url}', '${safeTitle}', ${item.episodeIndex || 0}, ${item.playbackPosition || 0})">
-                <button onclick="event.stopPropagation(); deleteHistoryItem('${safeURL}')"
+            <div class="history-item cursor-pointer relative group" onclick="playFromHistory(${inlineJsArgument(item.url)}, ${inlineJsArgument(item.title)}, ${Number(item.episodeIndex) || 0}, ${Number(item.playbackPosition) || 0})">
+                <button onclick="event.stopPropagation(); deleteHistoryItem(${inlineJsArgument(safeURL)})"
                         class="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-gray-400 hover:text-red-400 p-1 rounded-full hover:bg-gray-800 z-10"
                         title="删除记录">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -973,3 +998,5 @@ function showImportBox(fun) {
         fun(fileInput.files[0]);
     });
 }
+
+

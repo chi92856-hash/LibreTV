@@ -553,7 +553,7 @@ function renderDoubanCards(data, container) {
                     </div>
                 </div>
                 <div class="p-2 text-center bg-[#111]">
-                    <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
+                    <button onclick="fillAndSearchWithDouban(${inlineJsArgument(item.title)})" 
                             class="text-sm font-medium text-white truncate w-full hover:text-pink-400 transition"
                             title="${safeTitle}">
                         ${safeTitle}
@@ -791,3 +791,5 @@ function resetTagsToDefault() {
     
     showToast('已恢复默认标签', 'success');
 }
+
+

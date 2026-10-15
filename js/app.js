@@ -13,18 +13,6 @@ let episodesReversed = false;
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', function () {
-    // 初始化API复选框
-    initAPICheckboxes();
-
-    // 初始化自定义API列表
-    renderCustomAPIsList();
-
-    // 初始化显示选中的API数量
-    updateSelectedApiCount();
-
-    // 渲染搜索历史
-    renderSearchHistory();
-
     // 设置默认API选择（如果是第一次加载）
     if (!localStorage.getItem('hasInitializedDefaults')) {
         // 默认选中资源
@@ -41,6 +29,18 @@ document.addEventListener('DOMContentLoaded', function () {
         // 标记已初始化默认值
         localStorage.setItem('hasInitializedDefaults', 'true');
     }
+
+    // 初始化API复选框
+    initAPICheckboxes();
+
+    // 初始化自定义API列表
+    renderCustomAPIsList();
+
+    // 初始化显示选中的API数量
+    updateSelectedApiCount();
+
+    // 渲染搜索历史
+    renderSearchHistory();
 
     // 设置黄色内容过滤器开关初始状态
     const yellowFilterToggle = document.getElementById('yellowFilterToggle');
@@ -480,22 +480,6 @@ function removeCustomApi(index) {
     showToast('已移除自定义API: ' + apiName, 'info');
 }
 
-function toggleSettings(e) {
-    const settingsPanel = document.getElementById('settingsPanel');
-    if (!settingsPanel) return;
-
-    if (settingsPanel.classList.contains('show')) {
-        settingsPanel.classList.remove('show');
-    } else {
-        settingsPanel.classList.add('show');
-    }
-
-    if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-}
-
 // 设置事件监听器
 function setupEventListeners() {
     // 回车搜索
@@ -734,7 +718,8 @@ async function search() {
             const safeName = (item.vod_name || '').toString()
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
             const sourceInfo = item.source_name ?
                 `<span class="bg-[#222] text-xs px-1.5 py-0.5 rounded-full">${item.source_name}</span>` : '';
             const sourceCode = item.source_code || '';
@@ -748,7 +733,7 @@ async function search() {
 
             return `
                 <div class="card-hover bg-[#111] rounded-lg overflow-hidden cursor-pointer transition-all hover:scale-[1.02] h-full shadow-sm hover:shadow-md" 
-                     onclick="showDetails('${safeId}','${safeName}','${sourceCode}')" ${apiUrlAttr}>
+                     onclick="showDetails(${htmlJsArg(safeId)},${htmlJsArg(item.vod_name || '')},${htmlJsArg(sourceCode)})" ${apiUrlAttr}>
                     <div class="flex h-full">
                         ${hasCover ? `
                         <div class="relative flex-shrink-0 search-card-img-container">
@@ -983,6 +968,7 @@ async function showDetails(id, vod_name, sourceCode) {
         }
 
         modal.classList.remove('hidden');
+        modal.dataset.returnFocus = document.activeElement && document.activeElement.id || '';
         modalContent.scrollTop = 0;
         requestAnimationFrame(() => {
             const first = document.getElementById('detailPlayNow') || modal.querySelector('button');
@@ -1013,7 +999,7 @@ function playVideo(url, vod_name, sourceCode, episodeIndex = 0, vodId = '') {
     let watchUrl = `watch.html?id=${vodId || ''}&source=${sourceCode || ''}&url=${encodeURIComponent(url)}&index=${episodeIndex}&title=${encodeURIComponent(vod_name || '')}`;
 
     // 添加返回URL参数
-    if (currentPath.includes('index.html') || currentPath.endsWith('/')) {
+    if (currentPath) {
         watchUrl += `&back=${encodeURIComponent(currentPath)}`;
     }
 
@@ -1102,17 +1088,14 @@ function handlePlayerError() {
 }
 
 // 辅助函数用于渲染剧集按钮（使用当前的排序状态）
+function htmlJsArg(value) {
+    return JSON.stringify(String(value)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function renderEpisodes(vodName, sourceCode, vodId) {
     const episodes = episodesReversed ? [...currentEpisodes].reverse() : currentEpisodes;
-    return episodes.map((episode, index) => {
-        // 根据倒序状态计算真实的剧集索引
+    return episodes.map((episode,index) => {
         const realIndex = episodesReversed ? currentEpisodes.length - 1 - index : index;
-        return `
-            <button id="episode-${realIndex}" onclick="playVideo('${episode}','${vodName.replace(/"/g, '&quot;')}', '${sourceCode}', ${realIndex}, '${vodId}')" 
-                    class="px-4 py-2 bg-[#222] hover:bg-[#333] border border-[#333] rounded-lg transition-colors text-center episode-btn">
-                ${realIndex + 1}
-            </button>
-        `;
+        return '<button id="episode-' + realIndex + '" onclick="playVideo(' + [htmlJsArg(episode),htmlJsArg(vodName),htmlJsArg(sourceCode),realIndex,htmlJsArg(vodId)].join(',') + ')" class="px-4 py-2 bg-[#222] border border-[#333] rounded-lg episode-btn">' + (realIndex+1) + '</button>';
     }).join('');
 }
 
@@ -1120,7 +1103,7 @@ function renderEpisodes(vodName, sourceCode, vodId) {
 function copyLinks() {
     const episodes = episodesReversed ? [...currentEpisodes].reverse() : currentEpisodes;
     const linkList = episodes.join('\r\n');
-    navigator.clipboard.writeText(linkList).then(() => {
+    copyTextToClipboard(linkList).then(() => {
         showToast('播放链接已复制', 'success');
     }).catch(err => {
         showToast('复制失败，请检查浏览器权限', 'error');
@@ -1366,35 +1349,4 @@ function saveStringAsFile(content, fileName) {
 // 移除Node.js的require语句，因为这是在浏览器环境中运行的
 
  
-// Directional focus for remote controls inside the detail dialog.
-document.addEventListener('keydown', function (event) {
-    const modal = document.getElementById('modal');
-    if (!modal || modal.classList.contains('hidden') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) return;
-    const active = document.activeElement;
-    if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
-    const items = Array.from(modal.querySelectorAll('button,summary,a[href]')).filter(el => el.getClientRects().length && !el.disabled);
-    if (!items.length) return;
-    if (!items.includes(active)) { event.preventDefault(); items[0].focus(); return; }
-    const rect = active.getBoundingClientRect();
-    const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
-    const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
-    const sign = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-    let target = null, best = Infinity;
-    items.forEach(el => {
-        if (el === active) return;
-        const r = el.getBoundingClientRect();
-        const dx = r.left + r.width / 2 - x, dy = r.top + r.height / 2 - y;
-        const forward = (horizontal ? dx : dy) * sign;
-        const sideways = Math.abs(horizontal ? dy : dx);
-        if (forward <= 2) return;
-        const score = forward + sideways * 4;
-        if (score < best) { best = score; target = el; }
-    });
-    event.preventDefault();
-    if (target) { target.focus(); target.scrollIntoView({block:'nearest',inline:'nearest'}); }
-});
-document.addEventListener('DOMContentLoaded', function () {
-    const style = document.createElement('style');
-    style.textContent = '#modal button:focus,#modal summary:focus,#modal a:focus{outline:4px solid #38bdf8!important;outline-offset:2px;background-color:#1d4ed8!important;color:white!important} #modalContent{scroll-padding:12px}';
-    document.head.appendChild(style);
-});
+

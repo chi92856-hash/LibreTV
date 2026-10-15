@@ -80,6 +80,12 @@
             </div>
         </div>
 
+        <div id="remotePlaybackControls" class="player-container flex flex-wrap gap-3 py-3">
+            <button type="button" onclick="togglePlayerPlayback()" class="px-4 py-3 bg-blue-600 rounded-lg">播放／暂停</button>
+            <button type="button" onclick="togglePlayerFullscreen()" class="px-4 py-3 bg-[#333] rounded-lg">全屏／退出全屏</button>
+            <button type="button" onclick="retryPlayer()" class="px-4 py-3 bg-[#333] rounded-lg">重试播放</button>
+            <button type="button" onclick="showSwitchResourceModal()" class="px-4 py-3 bg-[#333] rounded-lg">切换播放源</button>
+        </div>
         <!-- 源信息 -->
         <div class="player-container flex justify-between py-2 px-4 mb-2 bg-gray-700" id="resourceInfoBarContainer">
             <!-- 资源信息卡片、切换按钮、视频数将由JS动态渲染 -->
@@ -278,5 +284,8 @@
             });
         });
     </script>
+    <script src="js/remote-controls.js?v=2"></script>
 </body>
 </html>
+
+

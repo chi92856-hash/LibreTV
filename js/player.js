@@ -1,5 +1,9 @@
 const selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '[]');
 const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]'); // 存储自定义API列表
+function getCustomApiInfo(value) {
+    const index = Number(value);
+    return Number.isInteger(index) && index >= 0 && index < customAPIs.length ? customAPIs[index] : null;
+}
 
 // 改进返回功能
 function goBack(event) {
@@ -12,7 +16,10 @@ function goBack(event) {
     
     if (returnUrl) {
         // 如果URL中有returnUrl参数，优先使用
-        window.location.href = decodeURIComponent(returnUrl);
+        let target = returnUrl;
+        if (/^%2[fF]|^https?%3[aA]/.test(target)) { try { target = decodeURIComponent(target); } catch (_) {} }
+        const back = new URL(target,window.location.origin);
+        window.location.href = back.origin === window.location.origin ? back.href : '/';
         return;
     }
     
@@ -57,7 +64,7 @@ function goBack(event) {
 // 页面加载时保存当前URL到localStorage，作为返回目标
 window.addEventListener('load', function () {
     // 保存前一页面URL
-    if (document.referrer && document.referrer !== window.location.href) {
+    if (document.referrer && document.referrer !== window.location.href && !/\/(watch|player)(\.html)?[?]/.test(document.referrer)) {
         localStorage.setItem('lastPageUrl', document.referrer);
     }
 
@@ -283,6 +290,9 @@ function initializePageContent() {
 
 // 处理键盘快捷键
 function handleKeyboardShortcuts(e) {
+    if (e.defaultPrevented) return;
+    const control = e.target.closest && e.target.closest('button,a,input,select,textarea,summary,[role="button"]');
+    if (control) return;
     // 忽略输入框中的按键事件
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -935,7 +945,7 @@ function playEpisode(index) {
     if (isWebkit) {
         initPlayer(url);
     } else {
-        art.switch = url;
+        if (art) art.switch = url; else initPlayer(url);
     }
 
     // 更新UI
@@ -970,7 +980,7 @@ function copyLinks() {
     const urlParams = new URLSearchParams(window.location.search);
     const linkUrl = urlParams.get('url') || '';
     if (linkUrl !== '') {
-        navigator.clipboard.writeText(linkUrl).then(() => {
+        copyTextToClipboard(linkUrl).then(() => {
             showToast('播放链接已复制', 'success');
         }).catch(err => {
             showToast('复制失败，请检查浏览器权限', 'error');
@@ -1082,7 +1092,7 @@ function saveToHistory() {
     // 尝试从URL中获取参数
     const urlParams = new URLSearchParams(window.location.search);
     const sourceName = urlParams.get('source') || '';
-    const sourceCode = urlParams.get('source') || '';
+    const sourceCode = urlParams.get('source_code') || urlParams.get('source') || '';
     const id_from_params = urlParams.get('id'); // Get video ID from player URL (passed as 'id')
 
     // 获取当前播放进度
@@ -1676,7 +1686,7 @@ async function showSwitchResourceModal() {
         const speedResult = speedResults[sourceKey] || { speed: -1, error: '未测试' };
         
         html += `
-            <div class="relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105 transition-transform'}" 
+            <div role="button" tabindex="${isCurrentSource ? -1 : 0}" aria-disabled="${isCurrentSource}" class="relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105 transition-transform'}" 
                  ${!isCurrentSource ? `onclick="switchToResource('${sourceKey}', '${result.vod_id}')"` : ''}>
                 <div class="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 relative">
                     <img src="${result.vod_pic}" 
@@ -1708,7 +1718,9 @@ async function showSwitchResourceModal() {
     }
     
     html += '</div>';
-    modalContent.innerHTML = html;
+    modalContent.innerHTML = sortedResults.length ? html : '<p class="p-4">没有找到可切换的资源，请返回搜索其他片源。</p>';
+    const first = modalContent.querySelector('[role="button"]:not([aria-disabled="true"])');
+    if(first) first.focus();
 }
 
 // 切换资源的函数
@@ -1770,9 +1782,12 @@ async function switchToResource(sourceKey, vodId) {
         // 构建播放页面URL
         const watchUrl = `player.html?id=${vodId}&source=${sourceKey}&url=${encodeURIComponent(targetUrl)}&index=${targetIndex}&title=${encodeURIComponent(currentVideoTitle)}`;
         
+        const back = new URLSearchParams(window.location.search).get('returnUrl');
+        const destination = new URL(watchUrl,window.location.href);
+        if(back) destination.searchParams.set('returnUrl',back);
         // 保存当前状态到localStorage
         try {
-            localStorage.setItem('currentVideoTitle', data.vod_name || '未知视频');
+            localStorage.setItem('currentVideoTitle', data.videoInfo?.title || currentVideoTitle);
             localStorage.setItem('currentEpisodes', JSON.stringify(data.episodes));
             localStorage.setItem('currentEpisodeIndex', targetIndex);
             localStorage.setItem('currentSourceCode', sourceKey);
@@ -1782,7 +1797,7 @@ async function switchToResource(sourceKey, vodId) {
         }
 
         // 跳转到播放页面
-        window.location.href = watchUrl;
+        window.location.replace(destination.href);
         
     } catch (error) {
         console.error('切换资源失败:', error);
@@ -1791,3 +1806,8 @@ async function switchToResource(sourceKey, vodId) {
         hideLoading();
     }
 }
+
+function togglePlayerPlayback() { if(art) art.toggle(); else showToast('播放器尚未就绪，请重试或换源','warning'); }
+function togglePlayerFullscreen() { if(art) art.fullscreenWeb = !art.fullscreenWeb; else showToast('播放器尚未就绪','warning'); }
+function retryPlayer() { if(currentVideoUrl) initPlayer(currentVideoUrl); else showToast('没有播放地址，请换源','warning'); }
+

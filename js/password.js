@@ -1,10 +1,13 @@
 // 密码保护功能
+// 此个人部署按站点所有者要求关闭入口密码；设为 true 可恢复。
+const ACCESS_PASSWORD_ENABLED = false;
 
 /**
  * 检查是否设置了密码保护
  * 通过读取页面上嵌入的环境变量来检查
  */
 function isPasswordProtected() {
+    if (!ACCESS_PASSWORD_ENABLED) return false;
     // 只检查普通密码
     const pwd = window.__ENV__ && window.__ENV__.PASSWORD;
     
@@ -18,6 +21,7 @@ function isPasswordProtected() {
  * 为了安全考虑，所有部署都必须设置密码
  */
 function isPasswordRequired() {
+    if (!ACCESS_PASSWORD_ENABLED) return false;
     return !isPasswordProtected();
 }
 

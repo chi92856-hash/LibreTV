@@ -44,17 +44,19 @@ jobs:
                   applicationId 'app.libretv.chi'
                   minSdk 24
                   targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 2
+                  versionName '1.1-tv-diagnostics'
               }
           }
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET" />
+            <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+            <uses-feature android:name="android.software.leanback" android:required="false" />
             <application android:label="LibreTV" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
               <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
-                <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+                <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter>
               </activity>
             </application>
           </manifest>
@@ -67,8 +69,22 @@ jobs:
           import android.view.ViewGroup;
           import android.webkit.*;
           import android.widget.FrameLayout;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import android.widget.Button;
+          import android.graphics.Color;
+          import android.graphics.Bitmap;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.content.Intent;
+          import android.net.Uri;
           public class MainActivity extends Activity {
             private WebView web;
+            private TextView status;
+            private String engine;
+            private boolean loading;
+            private int loadId;
+            private final String home = "https://libretv-chi-am3.pages.dev/";
             private FrameLayout root;
             private View fullscreen;
             private WebChromeClient.CustomViewCallback callback;
@@ -76,16 +92,69 @@ jobs:
               super.onCreate(state);
               root = new FrameLayout(this);
               setContentView(root);
-              web = new WebView(this);
-              root.addView(web, new FrameLayout.LayoutParams(-1,-1));
+              LinearLayout layout = new LinearLayout(this);
+              layout.setOrientation(LinearLayout.VERTICAL);
+              layout.setBackgroundColor(Color.rgb(20,20,20));
+              root.addView(layout,new FrameLayout.LayoutParams(-1,-1));
+              status = new TextView(this);
+              status.setTextColor(Color.WHITE);
+              status.setPadding(16,12,16,12);
+              status.setText("LibreTV 1.1 - preparing WebView");
+              layout.addView(status);
+              LinearLayout buttons = new LinearLayout(this);
+              layout.addView(buttons);
+              Button retry = new Button(this); retry.setText("Reload"); buttons.addView(retry);
+              Button browser = new Button(this); browser.setText("Open in browser"); buttons.addView(browser);
+              browser.setOnClickListener(v -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(home))); }
+                catch (Exception e) { status.setText("No browser installed: " + e.getMessage()); }
+              });
+              try { web = new WebView(this); }
+              catch (Throwable e) { status.setText("System WebView unavailable: " + e.toString()); retry.setEnabled(false); return; }
+              layout.addView(web,new LinearLayout.LayoutParams(-1,0,1));
+              engine = "Android " + android.os.Build.VERSION.RELEASE;
+              if (android.os.Build.VERSION.SDK_INT >= 26 && WebView.getCurrentWebViewPackage() != null)
+                engine += " / WebView " + WebView.getCurrentWebViewPackage().versionName;
+              status.setText(engine + " - loading website...");
+              retry.setOnClickListener(v -> web.loadUrl(home));
+              web.setFocusable(true); web.setFocusableInTouchMode(true);
               WebSettings settings = web.getSettings();
               settings.setJavaScriptEnabled(true);
               settings.setDomStorageEnabled(true);
+              settings.setUseWideViewPort(true);
+              settings.setLoadWithOverviewMode(true);
               settings.setMediaPlaybackRequiresUserGesture(false);
               settings.setAllowFileAccess(false);
               settings.setAllowContentAccess(false);
-              web.setWebViewClient(new WebViewClient());
+              web.setWebViewClient(new WebViewClient() {
+                @Override public void onPageStarted(WebView view,String url,Bitmap icon) {
+                  loading = true; final int id = ++loadId;
+                  status.setText(engine + " - loading " + url);
+                  new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (loading && id == loadId) status.setText(engine + " - loading timed out. Check network or try Open in browser.");
+                  },30000);
+                }
+                @Override public void onPageFinished(WebView view,String url) {
+                  loading = false;
+                  if (status.getText().toString().contains(" - loading ")) status.setText(engine + " - page loaded");
+                }
+                @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error) {
+                  if(req.isForMainFrame()) { loading = false; status.setText(engine + " - error " + error.getErrorCode() + ": " + error.getDescription()); }
+                }
+                @Override public void onReceivedHttpError(WebView view,WebResourceRequest req,WebResourceResponse response) {
+                  if(req.isForMainFrame()) { loading = false; status.setText(engine + " - HTTP " + response.getStatusCode()); }
+                }
+                @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail) {
+                  loading = false; status.setText(engine + " - WebView renderer stopped; restart app or update system WebView.");
+                  ((ViewGroup)view.getParent()).removeView(view); view.destroy(); web = null; retry.setEnabled(false); return true;
+                }
+              });
               web.setWebChromeClient(new WebChromeClient() {
+                @Override public boolean onConsoleMessage(ConsoleMessage msg) {
+                  if(msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR)
+                    status.setText(engine + " - script: " + msg.message());
+                  return true;
+                }
                 @Override public void onShowCustomView(View view, CustomViewCallback cb) {
                   if (fullscreen != null) { cb.onCustomViewHidden(); return; }
                   fullscreen = view; callback = cb;
@@ -96,7 +165,7 @@ jobs:
                 @Override public void onHideCustomView() { exitFullscreen(); }
               });
               if (state == null || web.restoreState(state) == null)
-                web.loadUrl("https://libretv-chi-am3.pages.dev/");
+                web.loadUrl(home);
             }
             private void exitFullscreen() {
               if (fullscreen == null) return;
@@ -107,15 +176,15 @@ jobs:
             }
             @Override public void onBackPressed() {
               if (fullscreen != null) exitFullscreen();
-              else if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+              else if (web != null && web.canGoBack()) web.goBack(); else super.onBackPressed();
             }
             @Override protected void onSaveInstanceState(Bundle state) {
-              web.saveState(state); super.onSaveInstanceState(state);
+              if(web != null) web.saveState(state); super.onSaveInstanceState(state);
             }
-            @Override protected void onPause() { web.onPause(); super.onPause(); }
-            @Override protected void onResume() { super.onResume(); web.onResume(); }
+            @Override protected void onPause() { if(web != null) web.onPause(); super.onPause(); }
+            @Override protected void onResume() { super.onResume(); if(web != null) web.onResume(); }
             @Override protected void onDestroy() {
-              root.removeAllViews(); web.destroy(); super.onDestroy();
+              root.removeAllViews(); if(web != null) web.destroy(); super.onDestroy();
             }
           }
           EOF

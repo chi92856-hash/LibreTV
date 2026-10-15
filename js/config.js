@@ -21,11 +21,20 @@ const SITE_CONFIG = {
 };
 
 // API站点配置
+
 const API_SITES = {
-    testSource: {
-        api: 'https://www.example.com/api.php/provide/vod',
-        name: '空内容测试源',
-        adult: true
+    liangzi: {
+        api: 'https://cj.lziapi.com/api.php/provide/vod/',
+        name: '量子资源',
+        adult: false
+    },
+    baofeng: {
+        api: 'https://bfzyapi.com/api.php/provide/vod/',
+        name: '暴风资源',
+        adult: false
+    }
+};
+  
     }
     //ARCHIVE https://telegra.ph/APIs-08-12
 };

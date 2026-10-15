@@ -948,7 +948,11 @@ async function showDetails(id, vod_name, sourceCode) {
             currentEpisodeIndex = 0;
 
             modalContent.innerHTML = `
-                ${detailInfoHtml}
+                <div class="flex flex-wrap gap-3 mb-4">
+                    <button id="detailPlayNow" onclick="document.getElementById('episode-0').click()" class="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold">▶ 立即播放</button>
+                    <button onclick="closeModal()" class="px-4 py-3 bg-[#333] text-white rounded-lg">返回结果选择其他片源</button>
+                </div>
+                <p class="text-gray-400 mb-3">播放选集（方向键选择，确定键播放）</p>
                 <div class="flex flex-wrap items-center justify-between mb-4 gap-2">
                     <div class="flex items-center gap-2">
                         <button onclick="toggleEpisodeOrder('${sourceCode}', '${id}')" 
@@ -967,6 +971,7 @@ async function showDetails(id, vod_name, sourceCode) {
                 <div id="episodesGrid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                     ${renderEpisodes(vod_name, sourceCode, id)}
                 </div>
+                <details class="mt-4"><summary tabindex="0" class="px-3 py-3 text-gray-300 cursor-pointer">展开影片简介</summary>${detailInfoHtml}</details>
             `;
         } else {
             modalContent.innerHTML = `
@@ -978,6 +983,11 @@ async function showDetails(id, vod_name, sourceCode) {
         }
 
         modal.classList.remove('hidden');
+        modalContent.scrollTop = 0;
+        requestAnimationFrame(() => {
+            const first = document.getElementById('detailPlayNow') || modal.querySelector('button');
+            if (first) first.focus();
+        });
     } catch (error) {
         console.error('获取详情错误:', error);
         showToast('获取详情失败，请稍后重试', 'error');
@@ -1354,3 +1364,37 @@ function saveStringAsFile(content, fileName) {
 }
 
 // 移除Node.js的require语句，因为这是在浏览器环境中运行的
+
+ 
+// Directional focus for remote controls inside the detail dialog.
+document.addEventListener('keydown', function (event) {
+    const modal = document.getElementById('modal');
+    if (!modal || modal.classList.contains('hidden') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) return;
+    const active = document.activeElement;
+    if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
+    const items = Array.from(modal.querySelectorAll('button,summary,a[href]')).filter(el => el.getClientRects().length && !el.disabled);
+    if (!items.length) return;
+    if (!items.includes(active)) { event.preventDefault(); items[0].focus(); return; }
+    const rect = active.getBoundingClientRect();
+    const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+    const sign = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+    let target = null, best = Infinity;
+    items.forEach(el => {
+        if (el === active) return;
+        const r = el.getBoundingClientRect();
+        const dx = r.left + r.width / 2 - x, dy = r.top + r.height / 2 - y;
+        const forward = (horizontal ? dx : dy) * sign;
+        const sideways = Math.abs(horizontal ? dy : dx);
+        if (forward <= 2) return;
+        const score = forward + sideways * 4;
+        if (score < best) { best = score; target = el; }
+    });
+    event.preventDefault();
+    if (target) { target.focus(); target.scrollIntoView({block:'nearest',inline:'nearest'}); }
+});
+document.addEventListener('DOMContentLoaded', function () {
+    const style = document.createElement('style');
+    style.textContent = '#modal button:focus,#modal summary:focus,#modal a:focus{outline:4px solid #38bdf8!important;outline-offset:2px;background-color:#1d4ed8!important;color:white!important} #modalContent{scroll-padding:12px}';
+    document.head.appendChild(style);
+});

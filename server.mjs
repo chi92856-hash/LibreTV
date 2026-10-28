@@ -135,7 +135,7 @@ function validateProxyAuth(req) {
   
   if (!authHash || authHash !== serverPasswordHash) {
     console.warn('代理请求鉴权失败：密码哈希不匹配');
-    console.warn(`期望: ${serverPasswordHash}, 收到: ${authHash}`);
+    // Do not log password-derived authentication tokens.
     return false;
   }
   
@@ -236,7 +236,7 @@ app.use((req, res) => {
 });
 
 // 启动服务器
-app.listen(config.port, () => {
+app.listen(config.port, process.env.HOST || '127.0.0.1', () => {
   console.log(`服务器运行在 http://localhost:${config.port}`);
   if (config.password !== '') {
     console.log('用户登录密码已设置');

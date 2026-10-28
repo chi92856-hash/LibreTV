@@ -1,127 +1,99 @@
-async function searchByAPIAndKeyWord(apiId, query) {
-    try {
-        let apiUrl, apiName, apiBaseUrl;
-        
-        // 处理自定义API
-        if (apiId.startsWith('custom_')) {
-            const customIndex = apiId.replace('custom_', '');
-            const customApi = getCustomApiInfo(customIndex);
-            if (!customApi) return [];
-            
-            apiBaseUrl = customApi.url;
-            apiUrl = apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(query);
-            apiName = customApi.name;
-        } else {
-            // 内置API
-            if (!API_SITES[apiId]) return [];
-            apiBaseUrl = API_SITES[apiId].api;
-            apiUrl = apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(query);
-            apiName = API_SITES[apiId].name;
-        }
-        
-        // 添加超时处理
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        
-        // 添加鉴权参数到代理URL
-        const proxiedUrl = await window.ProxyAuth?.addAuthToProxyUrl ? 
-            await window.ProxyAuth.addAuthToProxyUrl(PROXY_URL + encodeURIComponent(apiUrl)) :
-            PROXY_URL + encodeURIComponent(apiUrl);
-        
-        const response = await fetch(proxiedUrl, {
-            headers: API_CONFIG.search.headers,
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            return [];
-        }
-        
-        const data = await response.json();
-        
-        if (!data || !data.list || !Array.isArray(data.list) || data.list.length === 0) {
-            return [];
-        }
-        
-        // 处理第一页结果
-        const results = data.list.map(item => ({
-            ...item,
-            source_name: apiName,
-            source_code: apiId,
-            api_url: apiId.startsWith('custom_') ? getCustomApiInfo(apiId.replace('custom_', ''))?.url : undefined
-        }));
-        
-        // 获取总页数
-        const pageCount = data.pagecount || 1;
-        // 确定需要获取的额外页数 (最多获取maxPages页)
-        const pagesToFetch = Math.min(pageCount - 1, API_CONFIG.search.maxPages - 1);
-        
-        // 如果有额外页数，获取更多页的结果
-        if (pagesToFetch > 0) {
-            const additionalPagePromises = [];
-            
-            for (let page = 2; page <= pagesToFetch + 1; page++) {
-                // 构建分页URL
-                const pageUrl = apiBaseUrl + API_CONFIG.search.pagePath
-                    .replace('{query}', encodeURIComponent(query))
-                    .replace('{page}', page);
-                
-                // 创建获取额外页的Promise
-                const pagePromise = (async () => {
-                    try {
-                        const pageController = new AbortController();
-                        const pageTimeoutId = setTimeout(() => pageController.abort(), 15000);
-                        
-                        // 添加鉴权参数到代理URL
-                        const proxiedPageUrl = await window.ProxyAuth?.addAuthToProxyUrl ? 
-                            await window.ProxyAuth.addAuthToProxyUrl(PROXY_URL + encodeURIComponent(pageUrl)) :
-                            PROXY_URL + encodeURIComponent(pageUrl);
-                        
-                        const pageResponse = await fetch(proxiedPageUrl, {
-                            headers: API_CONFIG.search.headers,
-                            signal: pageController.signal
-                        });
-                        
-                        clearTimeout(pageTimeoutId);
-                        
-                        if (!pageResponse.ok) return [];
-                        
-                        const pageData = await pageResponse.json();
-                        
-                        if (!pageData || !pageData.list || !Array.isArray(pageData.list)) return [];
-                        
-                        // 处理当前页结果
-                        return pageData.list.map(item => ({
-                            ...item,
-                            source_name: apiName,
-                            source_code: apiId,
-                            api_url: apiId.startsWith('custom_') ? getCustomApiInfo(apiId.replace('custom_', ''))?.url : undefined
-                        }));
-                    } catch (error) {
-                        console.warn(`API ${apiId} 第${page}页搜索失败:`, error);
-                        return [];
-                    }
-                })();
-                
-                additionalPagePromises.push(pagePromise);
-            }
-            
-            // 等待所有额外页的结果
-            const additionalResults = await Promise.all(additionalPagePromises);
-            
-            // 合并所有页的结果
-            additionalResults.forEach(pageResults => {
-                if (pageResults.length > 0) {
-                    results.push(...pageResults);
-                }
-            });
-        }
-        
-        return results;
-    } catch (error) {
-        console.warn(`API ${apiId} 搜索失败:`, error);
-        return [];
+// Match titles locally: some providers search descriptions as well.
+function normalizeSearchTitle(value) {
+    return String(value || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+}
+function searchTitleScore(title, query) {
+    const name = normalizeSearchTitle(title);
+    const keyword = normalizeSearchTitle(query);
+    if (!keyword || !name.includes(keyword)) return 0;
+    if (name === keyword) return 3;
+    return name.startsWith(keyword) ? 2 : 1;
+}
+// Keep recent successful searches across navigation within this app window.
+const searchResultCache = new Map();
+const searchCacheStorageKey = 'libretvSearchCacheV1';
+try {
+    const stored = JSON.parse(sessionStorage.getItem(searchCacheStorageKey) || '[]');
+    if (Array.isArray(stored)) for (const [key, entry] of stored.slice(-10)) {
+        if (entry?.expires > Date.now() && Array.isArray(entry.results)) searchResultCache.set(key, entry);
     }
+} catch { /* Storage may be disabled or full; live search still works. */ }
+async function searchByAPIAndKeyWord(apiId, query, options = {}) {
+    if (options.signal?.aborted) return [];
+    const customApi = apiId.startsWith('custom_') ? getCustomApiInfo(apiId.replace('custom_', '')) : null;
+    const source = apiId.startsWith('custom_') ? customApi : API_SITES[apiId];
+    if (!source) return [];
+    const apiBaseUrl = customApi ? source.url : source.api;
+    const cacheKey = JSON.stringify([apiId, apiBaseUrl, query.trim().toLowerCase(), source.searchAction || 'videolist']);
+    const cached = searchResultCache.get(cacheKey);
+    if (cached?.expires > Date.now()) {
+        if (cached.results.length) options.onResults?.(cached.results);
+        return cached.results.slice();
+    }
+    const controller = new AbortController();
+    // One deadline covers headers, bodies and pagination; always clean up the timer.
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    const results = [];
+    let pageFailed = false;
+
+    async function fetchPage(page) {
+        const apiUrl = page === 1
+            ? apiBaseUrl + API_CONFIG.search.path + encodeURIComponent(query)
+            : apiBaseUrl + API_CONFIG.search.pagePath.replace('{query}', encodeURIComponent(query)).replace('{page}', page);
+        const requestUrl = new URL(apiUrl);
+        if (source.searchAction === 'list') requestUrl.searchParams.set('ac', 'list');
+        const proxyUrl = PROXY_URL + encodeURIComponent(requestUrl.href);
+        const proxiedUrl = window.ProxyAuth?.addAuthToProxyUrl
+            ? await window.ProxyAuth.addAuthToProxyUrl(proxyUrl) : proxyUrl;
+        const response = await fetch(proxiedUrl, { headers: API_CONFIG.search.headers, signal });
+        if (!response.ok) throw new Error('Search HTTP ' + response.status);
+        return await response.json();
+    }
+
+    function publishPage(data) {
+        if (signal.aborted || !Array.isArray(data?.list)) return;
+        const matches = data.list.filter(item => searchTitleScore(item.vod_name, query) > 0).map(item => ({
+            ...item,
+            source_name: source.name,
+            source_code: apiId,
+            api_url: customApi ? apiBaseUrl : undefined
+        }));
+        results.push(...matches);
+        if (matches.length) options.onResults?.(matches);
+    }
+
+    try {
+        const firstPage = await fetchPage(1);
+        if (!Array.isArray(firstPage?.list) || signal.aborted) return [];
+        publishPage(firstPage);
+        const matchingFirstPage = firstPage.list.filter(item => searchTitleScore(item.vod_name, query) > 0).length;
+        const pageLimit = matchingFirstPage < firstPage.list.length ? 3 : API_CONFIG.search.maxPages;
+        const lastPage = Math.max(1, Math.min(Number(firstPage.pagecount) || 1, pageLimit));
+        let nextPage = 2;
+        // Bound pagination fan-out without discarding later matching pages.
+        async function fetchRemainingPages() {
+            while (!signal.aborted && nextPage <= lastPage) {
+                const page = nextPage++;
+                try {
+                    publishPage(await fetchPage(page));
+                } catch (error) {
+                    pageFailed = true;
+                    if (!signal.aborted) console.warn('API', apiId, 'page', page, 'search failed:', error);
+                }
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(4, lastPage - 1) }, fetchRemainingPages));
+    } catch (error) {
+        if (!signal.aborted) console.warn('API', apiId, 'search failed:', error);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+    if (!signal.aborted && !pageFailed && results.length > 0 && results.length <= 500) {
+        searchResultCache.delete(cacheKey);
+        searchResultCache.set(cacheKey, { expires: Date.now() + 120000, results: results.slice() });
+        while (searchResultCache.size > 10) searchResultCache.delete(searchResultCache.keys().next().value);
+        try { sessionStorage.setItem(searchCacheStorageKey, JSON.stringify([...searchResultCache])); } catch {}
+    }
+    return results;
 }

@@ -152,9 +152,19 @@ async function handleApiRequest(url) {
                     // 分割不同播放源
                     const playSources = videoDetail.vod_play_url.split('$$$');
                     
-                    // 提取第一个播放源的集数（通常为主要源）
+                    // 优先选择直链线路，避免将 /share/ 网页当成视频加载
                     if (playSources.length > 0) {
-                        const mainSource = playSources[0];
+                        const mainSource = playSources.find(playSource => {
+                            const urls = playSource.split('#').map(episode => episode.slice(episode.indexOf('$') + 1));
+                            return urls.some(url => {
+                                try {
+                                    const parsed = new URL(url);
+                                    return ['http:', 'https:'].includes(parsed.protocol) && /\.(m3u8|mp4|webm|ogg)$/i.test(parsed.pathname);
+                                } catch {
+                                    return false;
+                                }
+                            });
+                        }) || playSources[0];
                         const episodeList = mainSource.split('#');
                         
                         // 从每个集数中提取URL

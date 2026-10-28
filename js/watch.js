@@ -90,6 +90,6 @@ window.onload = function() {
     setTimeout(() => {
         clearInterval(statusInterval);
         window.location.replace(finalPlayerUrl);
-    }, 2800); // 稍微早于meta refresh的时间，确保我们的JS控制重定向
+    }, 100); // 稍微早于meta refresh的时间，确保我们的JS控制重定向
 };
 

@@ -407,48 +407,60 @@ function fetchDoubanTags() {
 }
 
 // 渲染热门推荐内容
+let recommendSequence = 0;
+let recommendAbort = null;
+const recommendCache = new Map();
 function renderRecommend(tag, pageLimit, pageStart) {
-    const container = document.getElementById("douban-results");
+    const container = document.getElementById('douban-results');
     if (!container) return;
-
-    const loadingOverlayHTML = `
-        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-10">
-            <div class="flex items-center justify-center">
-                <div class="w-6 h-6 border-2 border-pink-500 border-t-transparent rounded-full animate-spin inline-block"></div>
-                <span class="text-pink-500 ml-4">加载中...</span>
-            </div>
-        </div>
-    `;
-
-    container.classList.add("relative");
-    container.insertAdjacentHTML('beforeend', loadingOverlayHTML);
-    
-    const target = `https://movie.douban.com/j/search_subjects?type=${doubanMovieTvCurrentSwitch}&tag=${tag}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`;
-    
-    // 使用通用请求函数
-    fetchDoubanData(target)
-        .then(data => {
-            renderDoubanCards(data, container);
-        })
-        .catch(error => {
-            console.error("获取豆瓣数据失败：", error);
-            container.innerHTML = `
-                <div class="col-span-full text-center py-8">
-                    <div class="text-red-400">❌ 获取豆瓣数据失败，请稍后重试</div>
-                    <div class="text-gray-500 text-sm mt-2">提示：使用VPN可能有助于解决此问题</div>
-                </div>
-            `;
-        });
+    const id = ++recommendSequence;
+    recommendAbort?.abort();
+    recommendAbort = new AbortController();
+    const requestSignal = recommendAbort.signal;
+    const target = `https://movie.douban.com/j/search_subjects?type=${doubanMovieTvCurrentSwitch}&tag=${encodeURIComponent(tag)}&sort=recommend&page_limit=${pageLimit}&page_start=${pageStart}`;
+    const cached = recommendCache.get(target);
+    if (cached && Date.now() - cached.time < 120000) {
+        renderDoubanCards(cached.data, container);
+        container.removeAttribute('aria-busy');
+        return;
+    }
+    container.setAttribute('aria-busy','true');
+    if (!container.querySelector('img')) {
+        container.replaceChildren();
+        const fragment = document.createDocumentFragment();
+        for (let i=0;i<5;i++) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'dt-skeleton';
+            placeholder.setAttribute('aria-hidden','true');
+            fragment.append(placeholder);
+        }
+        container.append(fragment);
+    }
+    fetchDoubanData(target, {signal: requestSignal}).then(data => {
+        if (id !== recommendSequence || requestSignal.aborted) return;
+        recommendCache.set(target, {time:Date.now(),data});
+        if (recommendCache.size > 12) recommendCache.delete(recommendCache.keys().next().value);
+        renderDoubanCards(data,container);
+    }).catch(error => {
+        if (id !== recommendSequence || requestSignal.aborted) return;
+        if (!container.querySelector('img')) {
+            container.innerHTML = '<div class="col-span-full"><div>暂时无法加载推荐</div><div class="text-gray-500 mt-2">可直接搜索影片，或点击“换一批”重试。</div></div>';
+        } else {
+            showToast('推荐暂时无法刷新，已保留当前影片','info');
+        }
+    }).finally(() => {
+        if (id === recommendSequence) container.removeAttribute('aria-busy');
+    });
 }
 
-async function fetchDoubanData(url) {
+async function fetchDoubanData(url, options = {}) {
     // 添加超时控制
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
     
     // 设置请求选项，包括信号和头部
     const fetchOptions = {
-        signal: controller.signal,
+        signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'Referer': 'https://movie.douban.com/',
@@ -472,13 +484,15 @@ async function fetchDoubanData(url) {
         
         return await response.json();
     } catch (err) {
+        clearTimeout(timeoutId);
+        if (options.signal?.aborted) throw err;
         console.error("豆瓣 API 请求失败（直接代理）：", err);
         
         // 失败后尝试备用方法：作为备选
         const fallbackUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
         
         try {
-            const fallbackResponse = await fetch(fallbackUrl);
+            const fallbackResponse = await fetch(fallbackUrl, {signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000)});
             
             if (!fallbackResponse.ok) {
                 throw new Error(`备用API请求失败! 状态: ${fallbackResponse.status}`);
@@ -537,10 +551,10 @@ function renderDoubanCards(data, container) {
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
-                <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
+                <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" data-cover-action="search">
                     <img src="${originalCoverUrl}" alt="${safeTitle}" 
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
+
                         loading="lazy" referrerpolicy="no-referrer">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
@@ -561,6 +575,21 @@ function renderDoubanCards(data, container) {
                 </div>
             `;
             
+            card.querySelector('[data-cover-action="search"]')?.addEventListener('click', () => fillAndSearchWithDouban(item.title));
+            const image = card.querySelector('img');
+            image?.addEventListener('error', async () => {
+                if (image.dataset.proxyTried) {
+                    image.style.display = 'none';
+                    image.parentElement.classList.add('dt-cover-empty');
+                    return;
+                }
+                image.dataset.proxyTried = '1';
+                const fallback = PROXY_URL + encodeURIComponent(originalCoverUrl);
+                const authenticated = window.ProxyAuth?.addAuthToProxyUrl
+                    ? await window.ProxyAuth.addAuthToProxyUrl(fallback) : fallback;
+                image.src = authenticated;
+                image.classList.add('object-contain');
+            });
             fragment.appendChild(card);
         });
     }

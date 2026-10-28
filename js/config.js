@@ -24,11 +24,13 @@ const SITE_CONFIG = {
 
 const API_SITES = {
     liangzi: {
+        searchAction: 'list',
         api: 'https://cj.lziapi.com/api.php/provide/vod/',
         name: '量子资源',
         adult: false
     },
     baofeng: {
+        searchAction: 'list',
         api: 'https://bfzyapi.com/api.php/provide/vod/',
         name: '暴风资源',
         adult: false

@@ -5,12 +5,17 @@ const {pathToFileURL}=require('node:url');
 const ROOT=__dirname;
 const ORIGIN='http://127.0.0.1:8899';
 let mainWindow;
+let backendServer;
 const single=app.requestSingleInstanceLock();
 if(!single||process.argv.includes('--quit'))app.quit();
 else {
  app.setName('LibreTV');
  app.on('second-instance',(_event,args)=>{if(args.includes('--quit')){app.quit();return;}if(mainWindow){if(mainWindow.isMinimized())mainWindow.restore();mainWindow.show();mainWindow.focus();}});
  app.on('window-all-closed',()=>app.quit());
+ app.on('before-quit',()=>{
+  backendServer?.close();
+  backendServer?.closeAllConnections();
+ });
  app.whenReady().then(async()=>{
   process.chdir(ROOT);
   const log=path.join(app.getPath('userData'),'desktop.log');
@@ -18,9 +23,10 @@ else {
   const output=message=>{try{fs.appendFileSync(log,String(message));}catch{}return true;};
   process.stdout.write=output;process.stderr.write=output;
   process.env.PORT='8899';process.env.HOST='127.0.0.1';
+  process.env.NODE_ENV ||= 'production';
   try {
-   // The app owns its Express listener; app.quit also closes the backend.
-   await import(pathToFileURL(path.join(ROOT,'server.mjs')).href);
+   // Import resolves only after our own backend has bound its port successfully.
+   ({server:backendServer}=await import(pathToFileURL(path.join(ROOT,'server.mjs')).href));
    Menu.setApplicationMenu(null);
    session.defaultSession.setPermissionRequestHandler((contents,permission,callback)=>{
     const local=contents.getURL().startsWith(ORIGIN+'/');
@@ -54,7 +60,10 @@ else {
    }
   } catch(error) {
    output(error.stack+'\n');
-   dialog.showErrorBox('LibreTV 启动失败','请确认旧版 LibreTV 后台服务已经关闭。\n'+error.message);
+   const message=error.code==='EADDRINUSE'
+    ? '本地端口 8899 已被占用，请关闭旧版 LibreTV 或占用该端口的程序后重试。'
+    : '本地服务或窗口启动失败，请重试。\n'+error.message;
+   dialog.showErrorBox('LibreTV 启动失败',message);
    app.quit();
   }
  }).catch(error=>{dialog.showErrorBox('LibreTV',error.message);app.quit();});

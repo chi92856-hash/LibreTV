@@ -1,3 +1,9 @@
+function escapeMarkup(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+}
+function safeCoverUrl(value) {
+    try { const url = new URL(String(value)); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
+}
 // 全局变量
 let selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '["liangzi", "baofeng", "qiqi"]'); // 默认选中资源
 let customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]'); // 存储自定义API列表
@@ -643,10 +649,34 @@ async function search() {
         saveSearchHistory(query);
 
         const collectedResults = [];
+        const resultKeys = new Set();
+        const searchAPIs = selectedAPIs.slice();
+        const paginationByAPI = new Map();
         let renderTimer = null;
         let hasRendered = false;
         let historyUpdated = false;
+        let initialComplete = false;
+        let loadingMore = false;
+        let moreButton = null;
         const isCurrentSearch = () => requestId === activeSearchSequence && !requestSignal.aborted;
+        function updateMoreButton() {
+            if (!isCurrentSearch() || !initialComplete) return;
+            const hasMore = [...paginationByAPI.values()].some(state => state.remainingPages.length);
+            if (!hasMore) {
+                moreButton?.remove();
+                return;
+            }
+            if (!moreButton) {
+                moreButton = document.createElement('button');
+                moreButton.type = 'button';
+                moreButton.className = 'col-span-full px-4 py-3 rounded-lg bg-blue-600 text-white disabled:opacity-60 disabled:cursor-wait focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500';
+                moreButton.addEventListener('click', loadMoreResults);
+            }
+            moreButton.disabled = loadingMore;
+            moreButton.setAttribute('aria-busy', String(loadingMore));
+            moreButton.textContent = loadingMore ? '正在加载更多…' : '继续搜索更多结果';
+            document.getElementById('results').appendChild(moreButton);
+        }
         function renderResults(complete = false) {
             if (!isCurrentSearch()) return;
             let allResults = collectedResults.slice();
@@ -705,6 +735,7 @@ async function search() {
                 </div>
             `;
                 hideLoading();
+                updateMoreButton();
                 return;
             }
 
@@ -717,7 +748,7 @@ async function search() {
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;');
                 const sourceInfo = item.source_name ?
-                    `<span class="bg-[#222] text-xs px-1.5 py-0.5 rounded-full">${item.source_name}</span>` : '';
+                    `<span class="bg-[#222] text-xs px-1.5 py-0.5 rounded-full">${escapeMarkup(item.source_name)}</span>` : '';
                 const sourceCode = item.source_code || '';
 
                 // 添加API URL属性，用于详情获取
@@ -733,7 +764,7 @@ async function search() {
                     <div class="flex h-full">
                         ${hasCover ? `
                             <div class="relative flex-shrink-0 search-card-img-container">
-                                <img src="${item.vod_pic}" alt="${safeName}"
+                                <img src="${escapeMarkup(safeCoverUrl(item.vod_pic))}" alt="${safeName}"
                                      class="h-full w-full object-cover transition-transform hover:scale-110"
                                      onerror="this.onerror=null; this.src='https://via.placeholder.com/300x450?text=无封面'; this.classList.add('object-contain');"
                                      loading="lazy">
@@ -751,7 +782,7 @@ async function search() {
                                           </span>` : ''}
                                     ${(item.vod_year || '') ?
                     `<span class="text-xs py-0.5 px-1.5 rounded bg-opacity-20 bg-purple-500 text-purple-300">
-                                              ${item.vod_year}
+                                              ${escapeMarkup(item.vod_year)}
                                           </span>` : ''}
                                 </div>
                                 <p class="text-gray-400 line-clamp-2 overflow-hidden ${hasCover ? '' : 'text-center'} mb-2">
@@ -778,7 +809,10 @@ async function search() {
             `;
             }).join('');
 
+            const moreHadFocus = moreButton && document.activeElement === moreButton;
             resultsDiv.innerHTML = safeResults;
+            updateMoreButton();
+            if (moreHadFocus && moreButton?.isConnected) moreButton.focus({ preventScroll: true });
             if (searchResultsCount) searchResultsCount.textContent = allResults.length;
             if (!historyUpdated && allResults.length) {
                 // 有搜索结果时，才更新URL
@@ -805,7 +839,12 @@ async function search() {
         }
         function receiveResults(batch) {
             if (!isCurrentSearch() || !Array.isArray(batch) || !batch.length) return;
-            collectedResults.push(...batch);
+            for (const item of batch) {
+                const key = JSON.stringify([item.source_code, item.vod_id ?? item.vod_name]);
+                if (resultKeys.has(key)) continue;
+                resultKeys.add(key);
+                collectedResults.push(item);
+            }
             if (!hasRendered) {
                 renderResults();
             } else if (renderTimer === null) {
@@ -815,13 +854,40 @@ async function search() {
                 }, 80);
             }
         }
+        function fetchSource(apiId, pagination) {
+            return searchByAPIAndKeyWord(apiId, query, {
+                signal: requestSignal,
+                onResults: receiveResults,
+                pagination,
+                previousResults: pagination ? collectedResults.filter(item => item.source_code === apiId) : [],
+                onPagination: state => { if (isCurrentSearch()) paginationByAPI.set(apiId, state); }
+            });
+        }
+        async function loadMoreResults() {
+            if (!isCurrentSearch() || loadingMore) return;
+            loadingMore = true;
+            window.__libretvSearching = true;
+            updateMoreButton();
+            try {
+                await Promise.allSettled(searchAPIs.filter(apiId => paginationByAPI.get(apiId)?.remainingPages.length)
+                    .map(apiId => fetchSource(apiId, paginationByAPI.get(apiId))));
+            } finally {
+                clearTimeout(renderTimer);
+                renderTimer = null;
+                if (isCurrentSearch()) {
+                    loadingMore = false;
+                    window.__libretvSearching = false;
+                    renderResults(true);
+                }
+            }
+        }
         try {
-            await Promise.allSettled(selectedAPIs.map(apiId =>
-                searchByAPIAndKeyWord(apiId, query, { signal: requestSignal, onResults: receiveResults })
-            ));
+            await Promise.allSettled(searchAPIs.map(apiId => fetchSource(apiId)));
         } finally {
             clearTimeout(renderTimer);
+            renderTimer = null;
         }
+        initialComplete = true;
         renderResults(true);
     } catch (error) {
         console.error('搜索错误:', error);
@@ -934,10 +1000,10 @@ async function showDetails(id, vod_name, sourceCode) {
 
         // 显示来源信息
         const sourceName = data.videoInfo && data.videoInfo.source_name ?
-            ` <span class="text-sm font-normal text-gray-400">(${data.videoInfo.source_name})</span>` : '';
+            ` <span class="text-sm font-normal text-gray-400">(${escapeMarkup(data.videoInfo.source_name)})</span>` : '';
 
         // 不对标题进行截断处理，允许完整显示
-        modalTitle.innerHTML = `<span class="break-words">${vod_name || '未知视频'}</span>${sourceName}`;
+        modalTitle.innerHTML = `<span class="break-words">${escapeMarkup(vod_name || '未知视频')}</span>${sourceName}`;
         currentVideoTitle = vod_name || '未知视频';
 
         if (data.episodes && data.episodes.length > 0) {
@@ -955,17 +1021,17 @@ async function showDetails(id, vod_name, sourceCode) {
                 <div class="modal-detail-info">
                     ${hasGridContent ? `
                     <div class="detail-grid">
-                        ${data.videoInfo.type ? `<div class="detail-item"><span class="detail-label">类型:</span> <span class="detail-value">${data.videoInfo.type}</span></div>` : ''}
-                        ${data.videoInfo.year ? `<div class="detail-item"><span class="detail-label">年份:</span> <span class="detail-value">${data.videoInfo.year}</span></div>` : ''}
-                        ${data.videoInfo.area ? `<div class="detail-item"><span class="detail-label">地区:</span> <span class="detail-value">${data.videoInfo.area}</span></div>` : ''}
-                        ${data.videoInfo.director ? `<div class="detail-item"><span class="detail-label">导演:</span> <span class="detail-value">${data.videoInfo.director}</span></div>` : ''}
-                        ${data.videoInfo.actor ? `<div class="detail-item"><span class="detail-label">主演:</span> <span class="detail-value">${data.videoInfo.actor}</span></div>` : ''}
-                        ${data.videoInfo.remarks ? `<div class="detail-item"><span class="detail-label">备注:</span> <span class="detail-value">${data.videoInfo.remarks}</span></div>` : ''}
+                        ${data.videoInfo.type ? `<div class="detail-item"><span class="detail-label">类型:</span> <span class="detail-value">${escapeMarkup(data.videoInfo.type)}</span></div>` : ''}
+                        ${data.videoInfo.year ? `<div class="detail-item"><span class="detail-label">年份:</span> <span class="detail-value">${escapeMarkup(data.videoInfo.year)}</span></div>` : ''}
+                        ${data.videoInfo.area ? `<div class="detail-item"><span class="detail-label">地区:</span> <span class="detail-value">${escapeMarkup(data.videoInfo.area)}</span></div>` : ''}
+                        ${data.videoInfo.director ? `<div class="detail-item"><span class="detail-label">导演:</span> <span class="detail-value">${escapeMarkup(data.videoInfo.director)}</span></div>` : ''}
+                        ${data.videoInfo.actor ? `<div class="detail-item"><span class="detail-label">主演:</span> <span class="detail-value">${escapeMarkup(data.videoInfo.actor)}</span></div>` : ''}
+                        ${data.videoInfo.remarks ? `<div class="detail-item"><span class="detail-label">备注:</span> <span class="detail-value">${escapeMarkup(data.videoInfo.remarks)}</span></div>` : ''}
                     </div>` : ''}
                     ${descriptionText ? `
                     <div class="detail-desc">
                         <p class="detail-label">简介:</p>
-                        <p class="detail-desc-content">${descriptionText}</p>
+                        <p class="detail-desc-content">${escapeMarkup(descriptionText)}</p>
                     </div>` : ''}
                 </div>
                 `;
@@ -1005,7 +1071,7 @@ async function showDetails(id, vod_name, sourceCode) {
             modalContent.innerHTML = `
                 <div class="text-center py-8">
                     <div class="text-red-400 mb-2">❌ 未找到播放资源</div>
-                    <div class="text-gray-500 text-sm">该视频可能暂时无法播放，请尝试其他视频</div>
+                    <div class="text-gray-500 text-sm">该片源没有可直接播放的视频线路，请返回结果选择其他片源</div>
                 </div>
             `;
         }

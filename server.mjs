@@ -6,11 +6,13 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { pipeline } from 'node:stream/promises';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const isProduction = process.env.NODE_ENV === 'production';
 
 const config = {
   port: process.env.PORT || 8080,
@@ -30,6 +32,30 @@ const log = (...args) => {
 };
 
 const app = express();
+const assetVersions = new Map();
+
+function assetVersion(filePath) {
+  const stat = fs.statSync(filePath);
+  const cached = assetVersions.get(filePath);
+  if (cached?.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.version;
+  const version = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').slice(0, 16);
+  assetVersions.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, version });
+  return version;
+}
+
+function versionPageAssets(content) {
+  return content.replace(/(<(?:script|link)\b[^>]*?\b(?:src|href)=)(["'])([^"']+)\2/gi,
+    (match, prefix, quote, asset) => {
+      const pathname = asset.split(/[?#]/)[0];
+      if (!/^\/?(?:js|css|libs)\/.+\.(?:js|css)$/i.test(pathname)) return match;
+      const filePath = path.resolve(__dirname, pathname.replace(/^\//, ''));
+      if (!filePath.startsWith(__dirname + path.sep) || !fs.existsSync(filePath)) return match;
+      const url = new URL(asset, 'http://localhost/');
+      url.searchParams.set('v', assetVersion(filePath));
+      const assetPath = asset.startsWith('/') ? url.pathname : url.pathname.slice(1);
+      return prefix + quote + assetPath + url.search + url.hash + quote;
+    });
+}
 
 app.use(cors({
   origin: config.corsOrigin,
@@ -60,15 +86,17 @@ async function renderPage(filePath, password) {
   } else {
     content = content.replace('{{PASSWORD}}', '');
   }
-  return content;
+  return versionPageAssets(content);
 }
 
-app.get(['/', '/index.html', '/player.html'], async (req, res) => {
+app.get(['/', '/index.html', '/player.html', '/watch.html', '/about.html'], async (req, res) => {
   try {
     let filePath;
     switch (req.path) {
       case '/player.html':
-        filePath = path.join(__dirname, 'player.html');
+      case '/watch.html':
+      case '/about.html':
+        filePath = path.join(__dirname, req.path.slice(1));
         break;
       default: // '/' 和 '/index.html'
         filePath = path.join(__dirname, 'index.html');
@@ -76,7 +104,7 @@ app.get(['/', '/index.html', '/player.html'], async (req, res) => {
     }
     
     const content = await renderPage(filePath, config.password);
-    res.send(content);
+    res.set('Cache-Control', 'no-store').send(content);
   } catch (error) {
     console.error('页面渲染错误:', error);
     res.status(500).send('读取静态页面失败');
@@ -87,7 +115,7 @@ app.get('/s=:keyword', async (req, res) => {
   try {
     const filePath = path.join(__dirname, 'index.html');
     const content = await renderPage(filePath, config.password);
-    res.send(content);
+    res.set('Cache-Control', 'no-store').send(content);
   } catch (error) {
     console.error('搜索页面渲染错误:', error);
     res.status(500).send('读取静态页面失败');
@@ -153,6 +181,9 @@ function validateProxyAuth(req) {
 }
 
 app.get('/proxy/:encodedUrl', async (req, res) => {
+  const controller = new AbortController();
+  const abortUpstream = () => { if (!res.writableFinished) controller.abort(); };
+  res.once('close', abortUpstream);
   try {
     // 验证鉴权
     if (!validateProxyAuth(req)) {
@@ -182,13 +213,17 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
           method: 'get',
           url: targetUrl,
           responseType: 'stream',
+          signal: controller.signal,
           timeout: config.timeout,
           headers: {
             'User-Agent': config.userAgent
           }
         });
       } catch (error) {
-        if (retries < maxRetries) {
+        const status = error.response?.status;
+        const transient = status ? [408, 429, 500, 502, 503, 504].includes(status) : ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EAI_AGAIN'].includes(error.code);
+        if (!controller.signal.aborted && transient && retries < maxRetries) {
+          error.response?.data?.destroy();
           retries++;
           log(`重试请求 (${retries}/${maxRetries}): ${targetUrl}`);
           return makeRequest();
@@ -197,7 +232,14 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
       }
     };
 
-    const response = await makeRequest();
+    let response;
+    try {
+      response = await makeRequest();
+    } catch (error) {
+      // Final upstream HTTP errors still have a body that must be streamed safely.
+      if (!error.response) throw error;
+      response = error.response;
+    }
 
     // 转发响应头（过滤敏感头）
     const headers = { ...response.headers };
@@ -207,23 +249,33 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
     ).split(',');
     
     sensitiveHeaders.forEach(header => delete headers[header]);
-    res.set(headers);
+    res.status(response.status).set(headers);
 
-    // 管道传输响应流
-    response.data.pipe(res);
+    // pipeline closes both sides on a broken stream or client disconnect.
+    await pipeline(response.data, res);
   } catch (error) {
-    console.error('代理请求错误:', error.message);
-    if (error.response) {
-      res.status(error.response.status || 500);
-      error.response.data.pipe(res);
-    } else {
-      res.status(500).send(`请求失败: ${error.message}`);
+    if (error.name !== 'AbortError' && error.code !== 'ERR_CANCELED' && error.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+      console.error('代理请求错误:', error.message);
     }
+    if (controller.signal.aborted || res.destroyed) return;
+    if (res.headersSent) return res.destroy();
+    res.status(502).send('代理请求失败，请稍后重试');
+  } finally {
+    res.off('close', abortUpstream);
   }
 });
 
 app.use(express.static(path.join(__dirname), {
-  maxAge: config.cacheMaxAge
+  maxAge: isProduction ? config.cacheMaxAge : 0,
+  immutable: isProduction,
+  setHeaders(res, filePath) {
+    if (!isProduction || path.extname(filePath) === '.html') {
+      res.setHeader('Cache-Control', 'no-store');
+    } else if (!/\.(?:js|css)$/i.test(filePath) || res.req.query.v !== assetVersion(filePath)) {
+      // Only content-versioned URLs may be reused without checking the server.
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
 }));
 
 app.use((err, req, res, next) => {
@@ -236,15 +288,22 @@ app.use((req, res) => {
 });
 
 // 启动服务器
-app.listen(config.port, process.env.HOST || '127.0.0.1', () => {
-  console.log(`服务器运行在 http://localhost:${config.port}`);
-  if (config.password !== '') {
-    console.log('用户登录密码已设置');
-  } else {
-    console.log('警告: 未设置 PASSWORD 环境变量，用户将被要求设置密码');
-  }
-  if (config.debug) {
-    console.log('调试模式已启用');
-    console.log('配置:', { ...config, password: config.password ? '******' : '' });
-  }
+export const server = await new Promise((resolve, reject) => {
+  const listener = app.listen(config.port, process.env.HOST || '127.0.0.1');
+  listener.once('error', reject);
+  listener.once('listening', () => {
+    listener.off('error', reject);
+    resolve(listener);
+  });
 });
+
+console.log(`服务器运行在 http://localhost:${server.address().port}`);
+if (config.password !== '') {
+  console.log('用户登录密码已设置');
+} else {
+  console.log('警告: 未设置 PASSWORD 环境变量，用户将被要求设置密码');
+}
+if (config.debug) {
+  console.log('调试模式已启用');
+  console.log('配置:', { ...config, password: config.password ? '******' : '' });
+}

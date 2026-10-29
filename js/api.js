@@ -164,15 +164,17 @@ async function handleApiRequest(url) {
                                     return false;
                                 }
                             });
-                        }) || playSources[0];
-                        const episodeList = mainSource.split('#');
+                        }) || '';
+                        const episodeList = mainSource ? mainSource.split('#') : [];
                         
                         // 从每个集数中提取URL
                         episodes = episodeList.map(ep => {
                             const parts = ep.split('$');
                             // 返回URL部分(通常是第二部分，如果有的话)
                             return parts.length > 1 ? parts[1] : '';
-                        }).filter(url => url && (url.startsWith('http://') || url.startsWith('https://')));
+                        }).filter(url => {
+                            try { const parsed = new URL(url); return ['http:', 'https:'].includes(parsed.protocol) && /\.(m3u8|mp4|webm|ogg)$/i.test(parsed.pathname); } catch { return false; }
+                        });
                     }
                 }
                 

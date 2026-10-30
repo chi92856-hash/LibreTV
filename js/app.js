@@ -5,8 +5,7 @@ function safeCoverUrl(value) {
     try { const url = new URL(String(value)); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
 }
 // 全局变量
-let selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '["liangzi", "baofeng", "qiqi"]'); // 默认选中资源
-let customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]'); // 存储自定义API列表
+let { selectedAPIs, customAPIs } = loadSourceSettings(["liangzi", "baofeng", "qiqi"]);
 
 // 添加当前播放的集数索引
 let currentEpisodeIndex = 0;

@@ -1,5 +1,4 @@
-const selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '[]');
-const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]'); // 存储自定义API列表
+const { selectedAPIs, customAPIs } = loadSourceSettings();
 function getCustomApiInfo(value) {
     const index = Number(value);
     return Number.isInteger(index) && index >= 0 && index < customAPIs.length ? customAPIs[index] : null;
@@ -1449,7 +1448,7 @@ function renderResourceInfoBar() {
         resourceName = API_SITES[currentSource].name;
     }
     if (resourceName === currentSource) {
-        const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]');
+        const { customAPIs } = loadSourceSettings();
         const customIndex = parseInt(currentSource.replace('custom_', ''), 10);
         if (customAPIs[customIndex]) {
             resourceName = customAPIs[customIndex].name || '自定义资源';
@@ -1587,7 +1586,10 @@ async function showSwitchResourceModal() {
     const modalTitle = document.getElementById('modalTitle');
     const modalContent = document.getElementById('modalContent');
 
-    modalTitle.innerHTML = `<span class="break-words">${currentVideoTitle}</span>`;
+    const title = document.createElement('span');
+    title.className = 'break-words';
+    title.textContent = currentVideoTitle;
+    modalTitle.replaceChildren(title);
     modalContent.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;grid-column:1/-1;">正在加载资源列表...</div>';
     modal.classList.remove('hidden');
 

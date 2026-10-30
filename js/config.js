@@ -4,6 +4,27 @@ const PROXY_URL = '/proxy/';    // 适用于 Cloudflare, Netlify (带重写), Ve
 const SEARCH_HISTORY_KEY = 'videoSearchHistory';
 const MAX_HISTORY_ITEMS = 5;
 
+function loadSourceSettings(defaultSelectedAPIs = []) {
+    function readArray(key, fallback, validItem) {
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw === null) return fallback.slice();
+            const value = JSON.parse(raw);
+            if (!Array.isArray(value) || !value.every(validItem)) throw new Error('Invalid source settings');
+            return value;
+        } catch {
+            console.warn('无法读取数据源设置，已使用默认值:', key);
+            return fallback.slice();
+        }
+    }
+    return {
+        selectedAPIs: readArray('selectedAPIs', defaultSelectedAPIs, item => typeof item === 'string' && item.trim().length > 0),
+        customAPIs: readArray('customAPIs', [], item => item && typeof item === 'object'
+            && !Array.isArray(item) && typeof item.url === 'string'
+            && (item.name === undefined || typeof item.name === 'string'))
+    };
+}
+
 // 密码保护配置
 // 注意：PASSWORD 环境变量是必需的，所有部署都必须设置密码以确保安全
 const PASSWORD_CONFIG = {

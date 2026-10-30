@@ -39,8 +39,6 @@ async function handleApiRequest(url) {
                     signal: controller.signal
                 });
                 
-                clearTimeout(timeoutId);
-                
                 if (!response.ok) {
                     throw new Error(`API请求失败: ${response.status}`);
                 }
@@ -66,9 +64,8 @@ async function handleApiRequest(url) {
                     code: 200,
                     list: data.list || [],
                 });
-            } catch (fetchError) {
+            } finally {
                 clearTimeout(timeoutId);
-                throw fetchError;
             }
         }
 
@@ -127,8 +124,6 @@ async function handleApiRequest(url) {
                     headers: API_CONFIG.detail.headers,
                     signal: controller.signal
                 });
-                
-                clearTimeout(timeoutId);
                 
                 if (!response.ok) {
                     throw new Error(`详情请求失败: ${response.status}`);
@@ -203,9 +198,8 @@ async function handleApiRequest(url) {
                         source_code: sourceCode
                     }
                 });
-            } catch (fetchError) {
+            } finally {
                 clearTimeout(timeoutId);
-                throw fetchError;
             }
         }
 
@@ -223,13 +217,11 @@ async function handleApiRequest(url) {
 
 // 处理自定义API的特殊详情页
 async function handleCustomApiSpecialDetail(id, customApi) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
         // 构建详情页URL
         const detailUrl = `${customApi}/index.php/vod/detail/id/${id}.html`;
-        
-        // 添加超时处理
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
         
         // 添加鉴权参数到代理URL
         const proxiedUrl = await window.ProxyAuth?.addAuthToProxyUrl ? 
@@ -243,8 +235,6 @@ async function handleCustomApiSpecialDetail(id, customApi) {
             },
             signal: controller.signal
         });
-        
-        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`自定义API详情页请求失败: ${response.status}`);
@@ -285,18 +275,18 @@ async function handleCustomApiSpecialDetail(id, customApi) {
     } catch (error) {
         console.error(`自定义API详情获取失败:`, error);
         throw error;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
 // 通用特殊源详情处理函数
 async function handleSpecialSourceDetail(id, sourceCode) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
         // 构建详情页URL（使用配置中的detail URL而不是api URL）
         const detailUrl = `${API_SITES[sourceCode].detail}/index.php/vod/detail/id/${id}.html`;
-        
-        // 添加超时处理
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
         
         // 添加鉴权参数到代理URL
         const proxiedUrl = await window.ProxyAuth?.addAuthToProxyUrl ? 
@@ -310,8 +300,6 @@ async function handleSpecialSourceDetail(id, sourceCode) {
             },
             signal: controller.signal
         });
-        
-        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`详情页请求失败: ${response.status}`);
@@ -364,6 +352,8 @@ async function handleSpecialSourceDetail(id, sourceCode) {
     } catch (error) {
         console.error(`${API_SITES[sourceCode].name}详情获取失败:`, error);
         throw error;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 

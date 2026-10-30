@@ -10,6 +10,12 @@ let cachedPasswordHash = null;
  * 获取当前会话的密码哈希
  */
 async function getPasswordHash() {
+    // Server configuration must take precedence over hashes saved by an older deployment.
+    const configuredHash = window.__ENV__?.PASSWORD;
+    if (typeof configuredHash === 'string' && /^[a-f0-9]{64}$/i.test(configuredHash)) {
+        cachedPasswordHash = configuredHash;
+        return configuredHash;
+    }
     if (cachedPasswordHash) {
         return cachedPasswordHash;
     }
@@ -43,12 +49,6 @@ async function getPasswordHash() {
         } catch (error) {
             console.error('生成密码哈希失败:', error);
         }
-    }
-    
-    // 4. 如果用户没有设置密码，尝试使用环境变量中的密码哈希
-    if (window.__ENV__ && window.__ENV__.PASSWORD) {
-        cachedPasswordHash = window.__ENV__.PASSWORD;
-        return window.__ENV__.PASSWORD;
     }
     
     return null;
@@ -113,7 +113,8 @@ function clearAuthCache() {
 
 // 监听密码变化，清除缓存
 window.addEventListener('storage', (e) => {
-    if (e.key === 'userPassword' || (window.PASSWORD_CONFIG && e.key === window.PASSWORD_CONFIG.localStorageKey)) {
+    const verificationKey = typeof PASSWORD_CONFIG !== 'undefined' ? PASSWORD_CONFIG.localStorageKey : 'passwordVerified';
+    if (e.key === null || ['userPassword', 'passwordHash', 'proxyAuthHash', verificationKey].includes(e.key)) {
         clearAuthCache();
     }
 });

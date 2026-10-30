@@ -167,6 +167,8 @@ export async function onRequest(context) {
     // 创建标准化的响应
     function createResponse(body, status = 200, headers = {}) {
         const responseHeaders = new Headers(headers);
+        responseHeaders.delete('content-encoding');
+        responseHeaders.delete('content-length');
         // 关键：添加 CORS 跨域头，允许前端 JS 访问代理后的响应
         responseHeaders.set("Access-Control-Allow-Origin", "*"); // 允许任何来源访问
         responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS"); // 允许的方法
@@ -257,6 +259,10 @@ export async function onRequest(context) {
             'Referer': request.headers.get('Referer') || new URL(targetUrl).origin
         });
 
+        if (/(^|\.)doubanio\.com$/i.test(new URL(targetUrl).hostname)) {
+            headers.set('Referer', 'https://movie.douban.com/');
+        }
+
         try {
             // 直接请求目标 URL
             logDebug(`开始直接请求: ${targetUrl}`);
@@ -269,9 +275,9 @@ export async function onRequest(context) {
                  throw new Error(`HTTP error ${response.status}: ${response.statusText}. URL: ${targetUrl}. Body: ${errorBody.substring(0, 150)}`);
             }
 
-            // 读取响应内容为文本
-            const content = await response.text();
             const contentType = response.headers.get('Content-Type') || '';
+            const content = contentType.toLowerCase().startsWith('image/')
+                ? await response.arrayBuffer() : await response.text();
             logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.length}`);
             return { content, contentType, responseHeaders: response.headers }; // 同时返回原始响应头
 
@@ -500,7 +506,7 @@ export async function onRequest(context) {
         logDebug(`收到代理请求: ${targetUrl}`);
 
         // --- 缓存检查 (KV) ---
-        const cacheKey = `proxy_raw:${targetUrl}`; // 使用原始内容的缓存键
+        const cacheKey = `proxy_raw:v2:${targetUrl}`; // Skip previously text-decoded image cache entries.
         let kvNamespace = null;
         try {
             kvNamespace = env.LIBRETV_PROXY_KV;
@@ -542,7 +548,7 @@ export async function onRequest(context) {
         const { content, contentType, responseHeaders } = await fetchContentWithType(targetUrl);
 
         // --- 写入缓存 (KV) ---
-        if (kvNamespace) {
+        if (kvNamespace && typeof content === 'string') {
              try {
                  const headersToCache = {};
                  responseHeaders.forEach((value, key) => { headersToCache[key.toLowerCase()] = value; });

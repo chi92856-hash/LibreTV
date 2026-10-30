@@ -145,6 +145,9 @@ async function fetchContentWithType(targetUrl, requestHeaders) {
         // 尝试设置一个合理的 Referer
         'Referer': requestHeaders['referer'] || new URL(targetUrl).origin,
     };
+    if (/(^|\.)doubanio\.com$/i.test(new URL(targetUrl).hostname)) {
+        headers.Referer = 'https://movie.douban.com/';
+    }
     // 清理空值的头
     Object.keys(headers).forEach(key => headers[key] === undefined || headers[key] === null || headers[key] === '' ? delete headers[key] : {});
 
@@ -165,8 +168,9 @@ async function fetchContentWithType(targetUrl, requestHeaders) {
         }
 
         // 读取响应内容
-        const content = await response.text();
         const contentType = response.headers.get('content-type') || '';
+        const content = contentType.toLowerCase().startsWith('image/')
+            ? Buffer.from(await response.arrayBuffer()) : await response.text();
         logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.length}`);
         // 返回结果
         return { content, contentType, responseHeaders: response.headers };

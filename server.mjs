@@ -216,7 +216,9 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
           signal: controller.signal,
           timeout: config.timeout,
           headers: {
-            'User-Agent': config.userAgent
+            'User-Agent': config.userAgent,
+            ...(/(^|\.)doubanio\.com$/i.test(new URL(targetUrl).hostname)
+              ? { Referer: 'https://movie.douban.com/' } : {})
           }
         });
       } catch (error) {

@@ -513,6 +513,37 @@ async function fetchDoubanData(url, options = {}) {
     }
 }
 
+function loadDoubanCover(image, coverUrl) {
+    const unavailable = () => {
+        image.style.display = 'none';
+        image.parentElement.classList.add('dt-cover-empty');
+    };
+    let originalUrl;
+    try {
+        const parsed = new URL(coverUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid cover URL');
+        originalUrl = parsed.href;
+    } catch {
+        unavailable();
+        return;
+    }
+    let proxyTried = false;
+    image.addEventListener('error', async () => {
+        if (proxyTried) return unavailable();
+        proxyTried = true;
+        try {
+            // Bypass any image response cached before binary proxy support.
+            const fallback = PROXY_URL + encodeURIComponent(originalUrl) + '?cover=2';
+            const authenticated = window.ProxyAuth?.addAuthToProxyUrl
+                ? await window.ProxyAuth.addAuthToProxyUrl(fallback) : fallback;
+            if (image.isConnected) image.src = authenticated;
+        } catch {
+            unavailable();
+        }
+    });
+    image.src = originalUrl;
+}
+
 // 抽取渲染豆瓣卡片的逻辑到单独函数
 function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
@@ -542,17 +573,10 @@ function renderDoubanCards(data, container) {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
             
-            // 处理图片URL
-            // 1. 直接使用豆瓣图片URL (添加no-referrer属性)
-            const originalCoverUrl = item.cover;
-            
-            // 2. 也准备代理URL作为备选
-            const proxiedCoverUrl = PROXY_URL + encodeURIComponent(originalCoverUrl);
-            
             // 为不同设备优化卡片布局
             card.innerHTML = `
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" data-cover-action="search">
-                    <img src="${originalCoverUrl}" alt="${safeTitle}" 
+                    <img alt="${safeTitle}"
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
 
                         loading="lazy" referrerpolicy="no-referrer">
@@ -577,19 +601,7 @@ function renderDoubanCards(data, container) {
             
             card.querySelector('[data-cover-action="search"]')?.addEventListener('click', () => fillAndSearchWithDouban(item.title));
             const image = card.querySelector('img');
-            image?.addEventListener('error', async () => {
-                if (image.dataset.proxyTried) {
-                    image.style.display = 'none';
-                    image.parentElement.classList.add('dt-cover-empty');
-                    return;
-                }
-                image.dataset.proxyTried = '1';
-                const fallback = PROXY_URL + encodeURIComponent(originalCoverUrl);
-                const authenticated = window.ProxyAuth?.addAuthToProxyUrl
-                    ? await window.ProxyAuth.addAuthToProxyUrl(fallback) : fallback;
-                image.src = authenticated;
-                image.classList.add('object-contain');
-            });
+            if (image) loadDoubanCover(image, item.cover);
             fragment.appendChild(card);
         });
     }

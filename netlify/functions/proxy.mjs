@@ -130,6 +130,9 @@ async function fetchContentWithType(targetUrl, requestHeaders) {
         'Accept-Language': requestHeaders['accept-language'] || 'zh-CN,zh;q=0.9,en;q=0.8',
         'Referer': requestHeaders['referer'] || new URL(targetUrl).origin,
     };
+    if (/(^|\.)doubanio\.com$/i.test(new URL(targetUrl).hostname)) {
+        headers.Referer = 'https://movie.douban.com/';
+    }
     Object.keys(headers).forEach(key => headers[key] === undefined || headers[key] === null || headers[key] === '' ? delete headers[key] : {});
     logDebug(`Fetching target: ${targetUrl} with headers: ${JSON.stringify(headers)}`);
     try {
@@ -140,8 +143,9 @@ async function fetchContentWithType(targetUrl, requestHeaders) {
             const err = new Error(`HTTP error ${response.status}: ${response.statusText}. URL: ${targetUrl}. Body: ${errorBody.substring(0, 200)}`);
             err.status = response.status; throw err;
         }
-        const content = await response.text();
         const contentType = response.headers.get('content-type') || '';
+        const content = contentType.toLowerCase().startsWith('image/')
+            ? Buffer.from(await response.arrayBuffer()) : await response.text();
         logDebug(`Fetch success: ${targetUrl}, Content-Type: ${contentType}, Length: ${content.length}`);
         return { content, contentType, responseHeaders: response.headers };
     } catch (error) {
@@ -310,8 +314,8 @@ export const handler = async (event, context) => {
             return {
                 statusCode: 200,
                 headers: netlifyHeaders,
-                body: content, // Body as string
-                // isBase64Encoded: false, // Set true only if returning binary data as base64
+                body: Buffer.isBuffer(content) ? content.toString('base64') : content,
+                isBase64Encoded: Buffer.isBuffer(content),
             };
         }
 

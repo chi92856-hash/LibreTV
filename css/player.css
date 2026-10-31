@@ -393,3 +393,25 @@ input:checked + .slider:before {
 #username {
     display: none !important;
 }
+
+/* Match the built-in transport controls in normal and fullscreen modes. */
+#player .art-next-episode-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+#player .art-next-episode-button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+#player .art-next-episode-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -4px;
+}

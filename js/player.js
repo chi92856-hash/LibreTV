@@ -415,6 +415,23 @@ function showShortcutHint(text, direction) {
 }
 
 // 初始化播放器
+function createNextEpisodeControl() {
+    return {
+        name: 'next-episode',
+        position: 'left',
+        index: 15,
+        html: '<button type="button" class="art-next-episode-button" aria-label="下一集" title="下一集"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M5 4v16l11-8L5 4zm13 0h3v16h-3z"/></svg></button>',
+        mounted(control) {
+            const button = control.querySelector('button');
+            button.disabled = currentEpisodeIndex >= currentEpisodes.length - 1;
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                playNextEpisode();
+            });
+        }
+    };
+}
+
 function initPlayer(videoUrl) {
     if (!videoUrl) {
         return
@@ -422,9 +439,12 @@ function initPlayer(videoUrl) {
 
     lastPlaybackError = '';
     document.getElementById('error').style.display = 'none';
+    const restoreFullscreenWeb = art?.fullscreenWeb === true;
     if (currentHls) { currentHls.destroy(); currentHls = null; }
     // 销毁旧实例
     if (art) {
+        // Web fullscreen moves the player outside its container; move it back before cleanup.
+        if (art.fullscreenWeb) art.fullscreenWeb = false;
         art.destroy();
         art = null;
     }
@@ -490,6 +510,7 @@ function initPlayer(videoUrl) {
         theme: '#23ade5',
         lang: (navigator.language || 'zh-cn').toLowerCase(),
         moreVideoAttr: { playsInline: true },
+        controls: [createNextEpisodeControl()],
         customType: {
             m3u8: function (video, url) {
                 // 清理之前的HLS实例
@@ -746,6 +767,8 @@ function initPlayer(videoUrl) {
         }
     });
 
+    if (restoreFullscreenWeb) art.fullscreenWeb = true;
+
     // 10秒后如果仍在加载，但不立即显示错误
     setTimeout(function () {
         // 如果视频已经播放开始，则不显示错误
@@ -818,6 +841,8 @@ function updateEpisodeInfo() {
 function updateButtonStates() {
     const prevButton = document.getElementById('prevButton');
     const nextButton = document.getElementById('nextButton');
+    const playerNextButton = art?.controls?.['next-episode']?.querySelector('button');
+    if (playerNextButton) playerNextButton.disabled = currentEpisodeIndex >= currentEpisodes.length - 1;
 
     // 处理上一集按钮
     if (currentEpisodeIndex > 0) {

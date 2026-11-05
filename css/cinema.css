@@ -1,6 +1,6 @@
 /* The cinema theme sits above the shared desktop layout. */
 html:has(.dt-home, .dt-player) {
-    background: #14161a !important;
+    background: #000 !important;
     color-scheme: dark;
 }
 .dt-home, .dt-player {
@@ -8,20 +8,23 @@ html:has(.dt-home, .dt-player) {
     --cinema-muted: #aeb6bd;
     --cinema-accent: #c2eadf;
     --cinema-line: #ffffff25;
-    --cinema-panel: #202428;
-    background: radial-gradient(ellipse at 64% 0, #262c32, #171a1f 50%, #14161a 80%) !important;
+    --cinema-panel: #111214;
+    --cinema-glass: linear-gradient(180deg, #202124, #0c0d0f);
+    --cinema-glass-shadow: inset 0 1px 0 #ffffff16, 0 3px 9px #000;
+    background: #000 !important;
 }
+:is(.dt-home, .dt-player), :is(.dt-home, .dt-player) * { scrollbar-color: #45484b #000; }
 :is(.dt-home, .dt-player) :focus-visible { outline-color: var(--cinema-accent) !important; }
-:is(.dt-home, .dt-player) #desktop-titlebar { background: #101216 !important; color: var(--cinema-muted); }
+:is(.dt-home, .dt-player) #desktop-titlebar { background: #000 !important; color: var(--cinema-muted); }
 :is(.dt-home, .dt-player) #desktop-titlebar i { background: var(--cinema-accent); }
 .dt-home .desktop-sidebar {
     top: 42px;
     left: 0;
     bottom: 0;
     border: 0;
-    border-right: 1px solid var(--cinema-line);
+    border-right: 1px solid #ffffff12;
     border-radius: 0;
-    background: #0e1013;
+    background: #000;
     box-shadow: none;
 }
 .dt-home .dt-brand, .dt-home .dt-nav.active { color: var(--glass-text); }
@@ -36,7 +39,7 @@ html:has(.dt-home, .dt-player) {
 }
 .dt-home .dt-nav { min-height: 42px; padding-block: 8px; border-radius: 24px; color: var(--cinema-muted); }
 .dt-home .dt-nav:hover { background: #ffffff10; color: var(--glass-text); }
-.dt-home .dt-nav.active::before { background: linear-gradient(#ffffff1c, #ffffff0d); border-color: var(--cinema-line); box-shadow: none; }
+.dt-home .dt-nav.active::before { background: var(--cinema-glass); border-color: var(--cinema-line); box-shadow: var(--cinema-glass-shadow); }
 body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340px) auto; gap: 14px; }
 .dt-filters { display: flex; position: relative; align-self: start; gap: clamp(10px, 2vw, 25px); width: max-content; }
 .dt-filters button { padding: 12px 2px; white-space: nowrap; color: var(--cinema-muted); font-size: 14px; }
@@ -51,13 +54,14 @@ body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340p
     transition: width 230ms ease, transform 230ms ease;
 }
 .dt-tools { align-self: start; margin-top: 3px; }
-.dt-tools button { display: grid; place-items: center; width: 43px; height: 43px; border: 1px solid var(--cinema-line); border-radius: 50%; background: #ffffff0e; }
-.dt-tools button:hover { background: #ffffff20; }
+.dt-tools button { display: grid; place-items: center; width: 43px; height: 43px; border: 1px solid var(--cinema-line); border-radius: 50%; background: var(--cinema-glass); box-shadow: var(--cinema-glass-shadow); }
+.dt-tools button:hover { background: linear-gradient(#2d3034, #17191b); transform: translateY(-1px); }
+.dt-tools button:active { transform: scale(.94); }
 .dt-tools svg { width: 19px; height: 19px; }
-.dt-home #searchArea > .w-full > .flex { background: #ffffff09 !important; border-color: var(--cinema-line) !important; box-shadow: none !important; }
+.dt-home #searchArea > .w-full > .flex { background: #0b0c0e !important; border-color: var(--cinema-line) !important; box-shadow: var(--cinema-glass-shadow) !important; }
 .dt-home #searchInput { background: transparent !important; color: var(--glass-text) !important; }
 .dt-home #searchInput::placeholder { color: var(--cinema-muted) !important; }
-.dt-home #searchArea button[aria-label="搜索按钮"] { background: #ffffff13 !important; color: var(--cinema-accent) !important; }
+.dt-home #searchArea button[aria-label="搜索按钮"] { background: var(--cinema-glass) !important; color: var(--cinema-accent) !important; box-shadow: var(--cinema-glass-shadow); }
 .dt-home #recentSearches button { background: #ffffff10 !important; color: var(--cinema-muted) !important; border-color: var(--cinema-line) !important; }
 .dt-home .dt-hero {
     display: grid;
@@ -130,9 +134,10 @@ body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340p
 .dt-home #doubanArea .rounded-full.bg-\[\#222\] { display: none; }
 .dt-home #douban-refresh, .dt-home .dt-section-head button { color: var(--cinema-accent) !important; }
 .dt-home #douban-tags button, .dt-home .dt-recommend-off button {
-    background: #ffffff0e !important;
+    background: var(--cinema-glass) !important;
     color: var(--cinema-muted) !important;
     border-color: var(--cinema-line) !important;
+    box-shadow: var(--cinema-glass-shadow);
 }
 .dt-home #douban-tags { position: relative; isolation: isolate; }
 .dt-tag-indicator {
@@ -263,11 +268,11 @@ body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340p
     color: var(--glass-text) !important;
     border-color: var(--cinema-line) !important;
 }
-.dt-player .player-header-fixed { background: #191d22 !important; border-color: var(--cinema-line) !important; color: var(--glass-text) !important; }
+.dt-player .player-header-fixed { background: #000 !important; border-color: var(--cinema-line) !important; color: var(--glass-text) !important; }
 .dt-player .player-header-fixed .gradient-text, .dt-player #videoTitle { color: var(--glass-text) !important; }
 .dt-player #playerContainer, .dt-player #playerContainer .player-container { background: #090b0e !important; border-color: var(--cinema-line) !important; box-shadow: none !important; }
 body.dt-player :is(button, .home-btn, #episodesList button, #episodeGrid button) {
-    background: #252a30 !important;
+    background: var(--cinema-glass) !important;
     color: var(--glass-text) !important;
     border-color: var(--cinema-line) !important;
 }

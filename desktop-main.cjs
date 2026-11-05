@@ -33,9 +33,9 @@ else {
     callback(local&&['fullscreen','clipboard-sanitized-write'].includes(permission));
    });
    mainWindow=new BrowserWindow({width:1320,height:900,minWidth:940,minHeight:680,
-    title:'LibreTV',backgroundColor:'#edf5fd',show:false,
+    title:'LibreTV',backgroundColor:'#000000',show:false,
     icon:path.join(ROOT,'image','logo.png'),titleBarStyle:'hidden',
-    titleBarOverlay:{color:'#101216',symbolColor:'#aeb6bd',height:40},
+    titleBarOverlay:{color:'#000000',symbolColor:'#e8ecee',height:42},
     webPreferences:{contextIsolation:true,sandbox:true,nodeIntegration:false,webSecurity:true,
        backgroundThrottling:false,spellcheck:false}});
    const isLocal=url=>{try{return new URL(url).origin===ORIGIN;}catch{return false;}};

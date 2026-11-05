@@ -1,0 +1,13 @@
+{
+  "name": "libretv-remake",
+  "version": "0.1.0",
+  "private": true,
+  "main": "desktop.cjs",
+  "scripts": {
+    "start": "node server.cjs",
+    "desktop": "electron ."
+  },
+  "devDependencies": {
+    "electron": "45.0.0"
+  }
+}

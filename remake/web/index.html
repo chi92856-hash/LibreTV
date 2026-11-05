@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LibreTV</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/hls.min.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="drag-strip" aria-hidden="true"></div>
+    <button class="brand glass" type="button" data-view="discover" aria-label="LibreTV 首页"><span data-icon="brand"></span>LibreTV</button>
+    <nav class="glass navigation" aria-label="主导航">
+      <button type="button" data-view="discover" aria-current="page"><span data-icon="compass"></span>发现</button>
+      <button type="button" data-view="history"><span data-icon="history"></span>历史</button>
+      <button type="button" data-view="library"><span data-icon="bookmark"></span>片单</button>
+    </nav>
+    <div class="utilities glass">
+      <button type="button" class="icon-button" data-dialog="search" aria-label="搜索" title="搜索"><span data-icon="search"></span></button>
+      <button type="button" class="icon-button" data-dialog="settings" aria-label="设置" title="设置"><span data-icon="sliders"></span></button>
+    </div>
+    <div id="window-controls" class="window-controls" aria-label="窗口控制" hidden>
+      <button type="button" class="glass icon-button" data-window="minimize" aria-label="最小化" title="最小化"><span data-icon="minus"></span></button>
+      <button type="button" class="glass icon-button" data-window="maximize" aria-label="最大化" title="最大化"><span data-icon="square"></span></button>
+      <button type="button" class="glass icon-button" data-window="close" aria-label="关闭" title="关闭"><span data-icon="close"></span></button>
+    </div>
+  </header>
+  <main>
+    <section id="discover" aria-label="发现影片">
+      <div class="feature-slot"><section class="feature" aria-label="精选推荐">
+        <div class="feature-art"></div>
+        <div class="feature-copy">
+          <h1 id="feature-title">星际穿越</h1>
+          <p id="feature-meta">2014 · 科幻 / 冒险</p>
+          <p id="feature-note">穿越虫洞，寻找人类的新家园。</p>
+          <button type="button" class="primary" id="feature-search"><span data-icon="play"></span>查找片源</button>
+        </div>
+        <div class="feature-controls glass">
+          <button type="button" class="icon-button" data-step="-1" aria-label="上一部"><span data-icon="left"></span></button>
+          <span id="feature-count"></span>
+          <button type="button" class="icon-button" data-step="1" aria-label="下一部"><span data-icon="right"></span></button>
+          <button type="button" class="icon-button" id="feature-pause" aria-label="暂停轮播"><span data-icon="pause"></span></button>
+        </div>
+      </section></div>
+      <section class="shelf" aria-labelledby="shelf-title">
+        <div class="shelf-header">
+          <h2 id="shelf-title">精选片库</h2>
+          <div class="glass filters" role="group" aria-label="影片分类">
+            <button type="button" data-kind="all" aria-pressed="true">全部</button>
+            <button type="button" data-kind="movie" aria-pressed="false">电影</button>
+            <button type="button" data-kind="series" aria-pressed="false">剧集</button>
+          </div>
+          <div class="shelf-actions">
+            <button type="button" class="glass back" id="shuffle-shelf"><span data-icon="refresh"></span>换一批</button>
+            <button type="button" class="glass back" id="manage-tags">管理标签</button>
+          </div>
+        </div>
+        <div class="tag-row">
+          <span aria-hidden="true">标签</span>
+          <div id="shelf-tags" class="shelf-tags" role="group" aria-label="精选影片标签"></div>
+        </div>
+        <div id="catalog-empty" class="status" hidden>精选片库暂无匹配影片。<button type="button" id="search-tag" class="glass back">搜索此标签</button></div>
+        <p class="status" id="recommend-status" role="status" hidden></p>
+        <div class="posters" id="catalog" aria-live="polite"></div>
+      </section>
+    </section>
+    <section id="collection" hidden>
+      <h1 id="collection-title"></h1>
+      <p class="status" id="collection-status" role="status"></p>
+      <div class="posters" id="collection-items"></div>
+    </section>
+    <section id="watch" hidden aria-label="播放工作台">
+      <div class="watch-layout">
+        <aside>
+          <button type="button" class="glass back" id="back"><span data-icon="left"></span>返回</button>
+          <h1 id="watch-title"></h1>
+          <p id="watch-meta" class="status"></p>
+          <button type="button" class="glass back" id="save"><span data-icon="bookmark"></span><span>加入片单</span></button>
+          <div class="lines" id="lines" role="group" aria-label="播放线路"></div>
+          <div class="episodes" id="episodes" role="group" aria-label="选集"></div>
+        </aside>
+        <div class="stage">
+          <video id="video" controls playsinline preload="metadata"></video>
+          <div class="stage-actions"><p class="status" id="play-status" role="status"></p><button type="button" class="glass back" id="next" disabled>下一集<span data-icon="right"></span></button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dialog id="search">
+    <div class="dialog-head"><h2>搜索影片</h2><button type="button" class="glass icon-button" data-dismiss aria-label="关闭搜索"><span data-icon="close"></span></button></div>
+    <form id="search-form" class="input-row">
+      <input name="query" type="search" placeholder="输入电影或剧集名称" aria-label="片名" maxlength="80" required>
+      <button class="primary" type="submit">搜索</button>
+    </form>
+    <p class="status" id="search-status" role="status">输入片名，在已启用的片源中查找。</p>
+    <div class="search-results" id="search-results"></div>
+  </dialog>
+  <dialog id="settings">
+    <div class="dialog-head"><h2>设置</h2><button type="button" class="glass icon-button" data-dismiss aria-label="关闭设置"><span data-icon="close"></span></button></div>
+    <label class="setting">搜索片源<select id="source"><option value="">全部片源</option><option value="lizi">量子资源</option><option value="baofeng">暴风资源</option></select></label>
+    <label class="setting">播完自动下一集<input id="autonext" type="checkbox"></label>
+    <section class="direct" aria-labelledby="api-title">
+      <h3 id="api-title">自定义 API</h3>
+      <p class="status">添加支持苹果 CMS JSON 格式的采集接口。</p>
+      <div class="managed-list" id="api-list"></div>
+      <form id="api-form" class="managed-form">
+        <input name="name" aria-label="片源名称" placeholder="片源名称" maxlength="24" required>
+        <input name="endpoint" aria-label="API 地址" placeholder="https://…/api.php/provide/vod/" type="url" maxlength="2048" required>
+        <button type="submit" class="primary">添加 API</button>
+      </form>
+      <p class="status" id="api-status" role="status"></p>
+    </section>
+    <form id="direct-form" class="direct">
+      <label for="direct">直接播放视频链接</label>
+      <div class="input-row"><input id="direct" type="url" placeholder="https://…/video.m3u8" required><button type="submit" class="primary">打开</button></div>
+      <p class="status" id="direct-status" role="status"></p>
+    </form>
+  </dialog>
+  <dialog id="tag-dialog" aria-labelledby="tag-title">
+    <div class="dialog-head"><h2 id="tag-title">管理标签</h2><button type="button" class="glass icon-button" data-dismiss aria-label="关闭标签管理"><span data-icon="close"></span></button></div>
+    <p class="status">自定义标签按名称匹配精选片库的片名、类型或年份。</p>
+    <div class="managed-list" id="tag-list"></div>
+    <form id="tag-form" class="input-row">
+      <input name="tag" aria-label="标签名称" placeholder="例如 悬疑、科幻或 2024" maxlength="16" required>
+      <button type="submit" class="primary">添加标签</button>
+    </form>
+    <p class="status" id="tag-status" role="status"></p>
+  </dialog>
+  <output id="toast" role="status"></output>
+</body>
+</html>

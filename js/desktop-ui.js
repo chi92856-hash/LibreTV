@@ -144,13 +144,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.body.classList.remove('dt-show-saved');
   savedSection.hidden=true;
   selectNav('home');
-  discovery.hidden=kind!=='home';
+  discovery.hidden=false;
   resume.hidden=kind!=='home';
   filters.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.kind===kind)));
   positionIndicator();
   document.getElementById(kind==='tv'?'douban-tv-toggle':'douban-movie-toggle')?.click();
   if(kind==='home')renderResume();
-  animateSection(kind==='home'?discovery:doubanArea);
   window.scrollTo(0,0);
  }
  positionIndicator();
@@ -218,19 +217,140 @@ document.addEventListener('DOMContentLoaded',()=>{
  // Decode visible posters asynchronously; keep offscreen cards out of layout work.
  new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1)node.querySelectorAll('img').forEach(img=>{img.decoding='async';img.loading='lazy';});}).observe(document.getElementById('douban-results'),{childList:true});
  const posters=document.getElementById('douban-results');
+ const hero=discovery.querySelector('.dt-hero');
+ const heroTitle=hero.querySelector('h2');
+ const heroMeta=hero.querySelector('p');
+ const heroSearch=hero.querySelector('[data-query]');
+ const heroImage=document.createElement('img');
+ heroImage.className='dt-hero-image';
+ heroImage.alt='';
+ heroImage.referrerPolicy='no-referrer';
+ heroImage.hidden=true;
+ hero.prepend(heroImage);
+ const carousel=document.createElement('div');
+ carousel.className='dt-hero-carousel';
+ carousel.hidden=true;
+ carousel.setAttribute('role','group');
+ carousel.setAttribute('aria-label','推荐电影轮播');
+ carousel.innerHTML='<button type="button" data-step="-1" aria-label="上一部">‹</button><span class="dt-hero-count"></span><button type="button" data-step="1" aria-label="下一部">›</button><button type="button" data-pause aria-label="暂停轮播" title="暂停轮播">Ⅱ</button>';
+ hero.append(carousel);
+ const pause=carousel.querySelector('[data-pause]');
+ let movies=[];
+ let movieIndex=0;
+ let paused=false;
+ let rotation;
+ function showMovie(index){
+  if(!movies.length)return;
+  movieIndex=(index+movies.length)%movies.length;
+  const movie=movies[movieIndex];
+  heroImage.src=movie.cover;
+  heroImage.hidden=false;
+  heroTitle.textContent=movie.title;
+  heroMeta.textContent=movie.rating;
+  heroSearch.dataset.query=movie.title;
+  carousel.querySelector('.dt-hero-count').textContent=`${movieIndex+1} / ${movies.length}`;
+  if(motion.matches)heroImage.animate([{opacity:0},{opacity:1}],{duration:320,easing:'ease-out'});
+ }
+ function resetRotation(){
+  clearInterval(rotation);
+  if(paused||movies.length<2)return;
+  rotation=setInterval(()=>{
+   const bounds=hero.getBoundingClientRect();
+   if(document.hidden||!hero.getClientRects().length||bounds.bottom<=0||bounds.top>=window.innerHeight||hero.matches(':hover, :focus-within')||panels.some(panel=>panel.classList.contains('show'))||!modal.classList.contains('hidden'))return;
+   showMovie(movieIndex+1);
+  },6500);
+ }
+ function collectMovies(){
+  if(posters.dataset.recommendationType!=='movie')return;
+  const available=[];
+  for(const cover of posters.querySelectorAll('[data-cover-action="search"]')){
+   const image=cover.querySelector('img');
+   if(!image?.naturalWidth||!image.complete||cover.classList.contains('dt-cover-empty'))continue;
+   const title=image.alt.trim();
+   if(!title||available.some(movie=>movie.title===title))continue;
+   available.push({title,cover:image.currentSrc||image.src,rating:cover.querySelector('.absolute.bottom-2.left-2')?.textContent.trim()||'推荐电影'});
+   if(available.length===6)break;
+  }
+  if(!available.length)return;
+  const current=movies[movieIndex];
+  movies=available;
+  const index=movies.findIndex(movie=>movie.title===current?.title&&movie.cover===current.cover);
+  if(index<0)showMovie(0);
+  else{
+   movieIndex=index;
+   carousel.querySelector('.dt-hero-count').textContent=`${movieIndex+1} / ${movies.length}`;
+  }
+  carousel.hidden=movies.length<2;
+  resetRotation();
+ }
+ carousel.addEventListener('click',event=>{
+  const step=event.target.closest('[data-step]');
+  if(step)showMovie(movieIndex+Number(step.dataset.step));
+  else if(event.target===pause){
+   paused=!paused;
+   const label=paused?'继续轮播':'暂停轮播';
+   pause.textContent=paused?'▶':'Ⅱ';
+   pause.setAttribute('aria-label',label);
+   pause.title=label;
+  }else return;
+  resetRotation();
+ });
+ posters.addEventListener('load',collectMovies,true);
+ new MutationObserver(collectMovies).observe(posters,{childList:true});
+ collectMovies();
  const hover=matchMedia('(hover: hover) and (pointer: fine)');
- posters.addEventListener('pointermove',event=>{
+ let pinnedCard;
+ posters.addEventListener('click',event=>{
+  const button=event.target.closest('[data-preview-pin]');
+  if(!button)return;
+  const card=button.parentElement;
+  const next=pinnedCard===card?null:card;
+  if(pinnedCard){
+   pinnedCard.classList.remove('dt-preview-pinned');
+   const previous=pinnedCard.querySelector('[data-preview-pin]');
+   previous.setAttribute('aria-pressed','false');
+   previous.textContent='固定预览';
+  }
+  pinnedCard=next;
+  if(next){
+   next.classList.add('dt-preview-pinned');
+   button.setAttribute('aria-pressed','true');
+   button.textContent='取消固定';
+  }
+ });
+ new MutationObserver(()=>{
+  if(pinnedCard&&!posters.contains(pinnedCard))pinnedCard=null;
+  const covers=posters.querySelectorAll('[data-cover-action="search"]');
+  if(!covers.length||!motion.matches)return;
+  for(const cover of covers){
+   cover.animate([{opacity:0},{opacity:1}],{duration:160,delay:200,easing:'ease-out',fill:'backwards'});
+  }
+ }).observe(posters,{childList:true});
+ new MutationObserver(records=>{
+  if(!motion.matches)return;
+  for(const {target} of records){
+   if(target.id==='episodesGrid'){
+    target.animate([{opacity:.25},{opacity:1}],{duration:160,easing:'ease-out'});
+   }
+  }
+ }).observe(document.getElementById('modalContent'),{childList:true,subtree:true});
+ function followPointer(event,card,hitArea,maxTiltX,maxTiltY){
   if(!motion.matches||!hover.matches||event.pointerType!=='mouse')return;
-  const card=event.target.closest('#douban-results > div:not(.col-span-full):not(.dt-skeleton)');
-  if(!card)return;
-  const bounds=card.getBoundingClientRect();
-  const x=(event.clientX-bounds.left)/bounds.width;
-  const y=(event.clientY-bounds.top)/bounds.height;
-  card.style.setProperty('--tilt-x',(0.5-y)*10+'deg');
-  card.style.setProperty('--tilt-y',(x-0.5)*13+'deg');
+  const bounds=hitArea.getBoundingClientRect();
+  if(!bounds.width||!bounds.height)return;
+  const x=Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width));
+  const y=Math.max(0,Math.min(1,(event.clientY-bounds.top)/bounds.height));
+  card.style.setProperty('--tilt-x',(0.5-y)*maxTiltX+'deg');
+  card.style.setProperty('--tilt-y',(x-0.5)*maxTiltY+'deg');
   card.style.setProperty('--light-x',x*100+'%');
   card.style.setProperty('--light-y',y*100+'%');
   card.classList.add('dt-tilting');
+ }
+ discovery.addEventListener('pointermove',event=>followPointer(event,hero,discovery,4,5));
+ discovery.addEventListener('pointerleave',()=>hero.classList.remove('dt-tilting'));
+ posters.addEventListener('pointermove',event=>{
+  const card=event.target.closest('#douban-results > div:not(.col-span-full):not(.dt-skeleton)');
+  if(card)followPointer(event,card,card,10,13);
  });
  posters.addEventListener('pointerout',event=>{
   const card=event.target.closest('.dt-tilting');

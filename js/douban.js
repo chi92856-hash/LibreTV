@@ -102,6 +102,7 @@ function initDouban() {
     
     // 渲染豆瓣标签
     renderDoubanTags();
+    setupDoubanTagRail();
     
     // 换一批按钮事件监听
     setupDoubanRefreshBtn();
@@ -316,7 +317,56 @@ function renderDoubanMovieTvSwitch() {
 }
 
 // 渲染豆瓣标签选择器
-function renderDoubanTags(tags) {
+function positionDoubanTagIndicator(container) {
+    const selected = container.querySelector('[aria-pressed="true"]');
+    container.style.setProperty('--tag-x', `${selected?.offsetLeft || 0}px`);
+    container.style.setProperty('--tag-width', `${selected?.offsetWidth || 0}px`);
+}
+
+function setupDoubanTagRail() {
+    const container = document.getElementById('douban-tags');
+    if (!container) return;
+    const rail = container.parentElement;
+    new ResizeObserver(() => positionDoubanTagIndicator(container)).observe(container);
+
+    let gesture = null;
+    let suppressClick = false;
+    rail.addEventListener('pointerdown', event => {
+        suppressClick = false;
+        if (event.pointerType !== 'mouse' || event.button !== 0 || rail.scrollWidth <= rail.clientWidth) return;
+        if (!container.contains(event.target)) return;
+        gesture = { id: event.pointerId, x: event.clientX, scroll: rail.scrollLeft };
+    });
+    rail.addEventListener('pointermove', event => {
+        if (!gesture || gesture.id !== event.pointerId) return;
+        const delta = event.clientX - gesture.x;
+        if (!suppressClick && Math.abs(delta) < 6) return;
+        if (!suppressClick) {
+            rail.setPointerCapture(event.pointerId);
+            rail.classList.add('dt-tag-dragging');
+            suppressClick = true;
+        }
+        rail.scrollLeft = gesture.scroll - delta;
+    });
+    const finishDrag = () => {
+        gesture = null;
+        rail.classList.remove('dt-tag-dragging');
+    };
+    rail.addEventListener('pointerup', finishDrag);
+    rail.addEventListener('pointercancel', finishDrag);
+    rail.addEventListener('lostpointercapture', finishDrag);
+    rail.addEventListener('pointerleave', () => {
+        if (!suppressClick) finishDrag();
+    });
+    rail.addEventListener('click', event => {
+        if (!suppressClick || event.detail === 0) return;
+        suppressClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+    }, true);
+}
+
+function renderDoubanTags() {
     const tagContainer = document.getElementById('douban-tags');
     if (!tagContainer) return;
     
@@ -325,9 +375,14 @@ function renderDoubanTags(tags) {
     
     // 清空标签容器
     tagContainer.innerHTML = '';
+    const indicator = document.createElement('span');
+    indicator.className = 'dt-tag-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    tagContainer.appendChild(indicator);
 
     // 先添加标签管理按钮
     const manageBtn = document.createElement('button');
+    manageBtn.type = 'button';
     manageBtn.className = 'py-1.5 px-3.5 rounded text-sm font-medium transition-all duration-300 bg-[#1a1a1a] text-gray-300 hover:bg-pink-700 hover:text-white border border-[#333] hover:border-white';
     manageBtn.innerHTML = '<span class="flex items-center"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>管理标签</span>';
     manageBtn.onclick = function() {
@@ -338,15 +393,15 @@ function renderDoubanTags(tags) {
     // 添加所有标签
     currentTags.forEach(tag => {
         const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('aria-pressed', String(tag === doubanCurrentTag));
         
         // 设置样式
-        let btnClass = 'py-1.5 px-3.5 rounded text-sm font-medium transition-all duration-300 border ';
+        let btnClass = 'py-1.5 px-3.5 rounded text-sm font-medium border bg-[#1a1a1a] text-gray-300 border-[#333]';
         
         // 当前选中的标签使用高亮样式
         if (tag === doubanCurrentTag) {
-            btnClass += 'bg-pink-600 text-white shadow-md border-white';
-        } else {
-            btnClass += 'bg-[#1a1a1a] text-gray-300 hover:bg-pink-700 hover:text-white border-[#333] hover:border-white';
+            btnClass += ' bg-pink-600';
         }
         
         btn.className = btnClass;
@@ -356,13 +411,21 @@ function renderDoubanTags(tags) {
             if (doubanCurrentTag !== tag) {
                 doubanCurrentTag = tag;
                 doubanPageStart = 0;
+                const previous = tagContainer.querySelector('[aria-pressed="true"]');
+                if (previous) {
+                    previous.setAttribute('aria-pressed', 'false');
+                    previous.classList.remove('bg-pink-600');
+                }
+                btn.setAttribute('aria-pressed', 'true');
+                btn.classList.add('bg-pink-600');
+                positionDoubanTagIndicator(tagContainer);
                 renderRecommend(doubanCurrentTag, doubanPageSize, doubanPageStart);
-                renderDoubanTags();
             }
         };
         
         tagContainer.appendChild(btn);
     });
+    positionDoubanTagIndicator(tagContainer);
 }
 
 // 设置换一批按钮事件
@@ -546,6 +609,7 @@ function loadDoubanCover(image, coverUrl) {
 
 // 抽取渲染豆瓣卡片的逻辑到单独函数
 function renderDoubanCards(data, container) {
+    container.dataset.recommendationType = doubanMovieTvCurrentSwitch;
     // 创建文档片段以提高性能
     const fragment = document.createDocumentFragment();
     
@@ -600,6 +664,23 @@ function renderDoubanCards(data, container) {
             `;
             
             card.querySelector('[data-cover-action="search"]')?.addEventListener('click', () => fillAndSearchWithDouban(item.title));
+            const preview = document.createElement('button');
+            preview.type = 'button';
+            preview.className = 'dt-preview-pin';
+            preview.dataset.previewPin = '';
+            preview.setAttribute('aria-label', `固定《${item.title}》的预览`);
+            preview.setAttribute('aria-pressed', 'false');
+            preview.textContent = '固定预览';
+            const previewLayer = document.createElement('div');
+            previewLayer.className = 'dt-card-preview';
+            previewLayer.setAttribute('aria-hidden', 'true');
+            const previewTitle = document.createElement('strong');
+            previewTitle.textContent = item.title;
+            const previewAction = document.createElement('span');
+            previewAction.textContent = item.rate ? `★ ${item.rate} · 点击查找片源` : '点击查找片源';
+            previewLayer.append(previewTitle, previewAction);
+            card.firstElementChild.append(previewLayer);
+            card.append(preview);
             const image = card.querySelector('img');
             if (image) loadDoubanCover(image, item.cover);
             fragment.appendChild(card);

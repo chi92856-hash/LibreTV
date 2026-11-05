@@ -67,8 +67,60 @@ body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340p
     border-color: var(--cinema-line);
     box-shadow: none;
 }
-.dt-home .dt-hero::before { background: linear-gradient(90deg, #101418 3%, #101418df 29%, #10141812 76%), linear-gradient(0deg, #101418a0, transparent 65%); }
-.dt-home .dt-hero-copy { padding: 32px clamp(22px, 4vw, 51px); }
+.dt-home .dt-hero::before { z-index: 1; background: linear-gradient(90deg, #101418 3%, #101418df 29%, #10141812 76%), linear-gradient(0deg, #101418a0, transparent 65%); }
+.dt-home .dt-hero {
+    transform: perspective(1400px);
+    transition: transform 360ms cubic-bezier(.2,.8,.2,1), box-shadow 280ms ease;
+}
+.dt-home .dt-hero.dt-tilting {
+    transform: perspective(1400px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) scale(1.008);
+    box-shadow: 0 14px 34px #0007;
+    transition: transform 100ms linear, box-shadow 100ms linear;
+}
+.dt-home .dt-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: radial-gradient(circle at var(--light-x, 50%) var(--light-y, 50%), #fff3, transparent 48%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+}
+.dt-home .dt-hero.dt-tilting::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+    .dt-home .dt-hero.dt-tilting { transform: none; box-shadow: none; }
+    .dt-home .dt-hero.dt-tilting::after { opacity: 0; }
+}
+.dt-home .dt-hero-copy { z-index: 2; padding: 32px clamp(22px, 4vw, 51px) 53px; }
+.dt-hero-image {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 72%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 34%;
+    mask-image: linear-gradient(90deg, transparent, black 38%);
+}
+.dt-hero:has(.dt-hero-image:not([hidden])) { background-image: none; }
+.dt-hero-carousel {
+    position: absolute;
+    z-index: 3;
+    bottom: 12px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px;
+    border: 1px solid #ffffff36;
+    border-radius: 24px;
+    background: #101418df;
+}
+.dt-hero-carousel[hidden], .dt-hero-image[hidden] { display: none; }
+.dt-hero-carousel button { width: 32px; height: 32px; border-radius: 50%; color: var(--glass-text); }
+.dt-hero-carousel button:hover { background: #ffffff22; }
+.dt-hero-carousel [data-step] { font-size: 22px; line-height: 1; }
+.dt-hero-count { color: var(--cinema-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .dt-home .dt-eyebrow { margin-bottom: 5px; color: var(--cinema-accent); font-size: 13px; letter-spacing: 0; }
 .dt-home .dt-hero h2 { font-size: clamp(36px, 5vw, 64px); line-height: 1.14; font-weight: 750; letter-spacing: -.035em; }
 .dt-home .dt-hero p { font-size: 14px; }
@@ -82,7 +134,24 @@ body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340p
     color: var(--cinema-muted) !important;
     border-color: var(--cinema-line) !important;
 }
-.dt-home #douban-tags button.bg-pink-600 { background: #c2eadf25 !important; color: var(--cinema-accent) !important; }
+.dt-home #douban-tags { position: relative; isolation: isolate; }
+.dt-tag-indicator {
+    position: absolute;
+    z-index: -1;
+    inset: 0 auto 0 0;
+    width: var(--tag-width, 0px);
+    transform: translateX(var(--tag-x, 0px));
+    background: #c2eadf25;
+    border: 1px solid #c2eadf68;
+    border-radius: 16px;
+    pointer-events: none;
+    transition: transform 240ms cubic-bezier(.2,.8,.2,1), width 240ms cubic-bezier(.2,.8,.2,1);
+}
+.dt-home #douban-tags button { flex-shrink: 0; transition: transform 120ms ease, background-color 150ms ease, color 150ms ease !important; }
+.dt-home #douban-tags button:hover { background: #ffffff23 !important; color: var(--glass-text) !important; }
+.dt-home #douban-tags button:active { transform: scale(.94); }
+.dt-home #douban-tags button[aria-pressed="true"] { background: transparent !important; color: var(--cinema-accent) !important; border-color: transparent !important; }
+.dt-tag-dragging, .dt-tag-dragging button { cursor: grabbing !important; user-select: none; }
 .dt-home #douban-results { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
 .dt-home #douban-results > div:not(.col-span-full):hover { transform: none !important; }
 .dt-home #douban-results > div:hover img { transform: none !important; }
@@ -102,6 +171,44 @@ body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340p
     inset: 0;
     pointer-events: none;
     background: radial-gradient(circle at var(--light-x) var(--light-y), #fff4, transparent 55%);
+}
+.dt-card-preview, .dt-preview-pin { display: none; }
+.dt-home #douban-results > div:has(.dt-preview-pin) { position: relative; }
+.dt-home .dt-card-preview {
+    position: absolute;
+    inset: auto 0 0;
+    display: grid;
+    gap: 4px;
+    padding: 30px 10px 10px;
+    background: linear-gradient(transparent, #080a0de8 48%);
+    color: var(--glass-text);
+    opacity: 0;
+    transform: translateY(5px);
+    transition: opacity 160ms ease, transform 160ms ease;
+    pointer-events: none;
+}
+.dt-card-preview strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.dt-card-preview span { color: #d7e0e3; font-size: 11px; }
+.dt-home .dt-preview-pin {
+    display: block;
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    z-index: 2;
+    padding: 5px 8px;
+    border: 1px solid #ffffff52;
+    border-radius: 16px;
+    background: #101418e8;
+    color: var(--glass-text);
+    font-size: 11px;
+}
+.dt-home .dt-preview-pin[aria-pressed="true"] { color: var(--cinema-accent); border-color: var(--cinema-accent); }
+.dt-home #douban-results > div:is(:focus-within, .dt-preview-pinned) .dt-card-preview { opacity: 1; transform: none; }
+.dt-home #douban-results > div:is(:focus-within, .dt-preview-pinned) .absolute.bottom-2.left-2 { visibility: hidden; }
+@media (hover: hover) and (pointer: fine) {
+    .dt-home #douban-results > div:hover .dt-card-preview { opacity: 1; transform: none; }
+    .dt-home #douban-results > div:hover .absolute.bottom-2.left-2 { visibility: hidden; }
+    .dt-home #douban-results > div:not(:hover, :focus-within, .dt-preview-pinned) .dt-preview-pin { opacity: 0; }
 }
 .dt-home #douban-results .p-2 button, .dt-home .dt-resume-info strong { color: var(--glass-text) !important; }
 .dt-home :is(.dt-empty-history, .dt-resume-card, .dt-recommend-off, #results > div, #douban-results > .col-span-full) {
@@ -180,10 +287,11 @@ body.dt-player .art-video-player button { background: transparent !important; bo
     .dt-home .dt-tools { grid-column: 2; grid-row: 1; margin-top: 0; }
     body.dt-home > div.fixed.top-4 { display: none !important; }
     .dt-home .dt-hero { min-height: 275px; }
+    .dt-hero-carousel { right: 10px; bottom: 8px; }
     .dt-home .dt-hero::before { background: linear-gradient(90deg, #101418e8, #10141828), linear-gradient(0deg, #101418aa, transparent 70%); }
     .dt-home #douban-results { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 12px !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .dt-filters span, .dt-home #douban-results > div > div:first-child { transition: none; }
+    .dt-filters span, .dt-home .dt-card-preview, .dt-home #douban-results > div > div:first-child { transition: none; }
     :is(.dt-home, .dt-player) #modal:not(.hidden) > div { animation: none; }
 }

@@ -35,7 +35,7 @@ else {
    mainWindow=new BrowserWindow({width:1320,height:900,minWidth:940,minHeight:680,
     title:'LibreTV',backgroundColor:'#edf5fd',show:false,
     icon:path.join(ROOT,'image','logo.png'),titleBarStyle:'hidden',
-    titleBarOverlay:{color:'#edf5fd',symbolColor:'#58789d',height:40},
+    titleBarOverlay:{color:'#101216',symbolColor:'#aeb6bd',height:40},
     webPreferences:{contextIsolation:true,sandbox:true,nodeIntegration:false,webSecurity:true,
        backgroundThrottling:false,spellcheck:false}});
    const isLocal=url=>{try{return new URL(url).origin===ORIGIN;}catch{return false;}};

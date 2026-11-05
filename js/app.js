@@ -1004,6 +1004,7 @@ async function showDetails(id, vod_name, sourceCode) {
         // 不对标题进行截断处理，允许完整显示
         modalTitle.innerHTML = `<span class="break-words">${escapeMarkup(vod_name || '未知视频')}</span>${sourceName}`;
         currentVideoTitle = vod_name || '未知视频';
+        modal.dataset.filmTitle = vod_name || '';
 
         if (data.episodes && data.episodes.length > 0) {
             // 构建详情信息HTML

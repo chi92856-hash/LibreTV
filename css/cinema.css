@@ -1,0 +1,189 @@
+/* The cinema theme sits above the shared desktop layout. */
+html:has(.dt-home, .dt-player) {
+    background: #14161a !important;
+    color-scheme: dark;
+}
+.dt-home, .dt-player {
+    --glass-text: #f4f4f1;
+    --cinema-muted: #aeb6bd;
+    --cinema-accent: #c2eadf;
+    --cinema-line: #ffffff25;
+    --cinema-panel: #202428;
+    background: radial-gradient(ellipse at 64% 0, #262c32, #171a1f 50%, #14161a 80%) !important;
+}
+:is(.dt-home, .dt-player) :focus-visible { outline-color: var(--cinema-accent) !important; }
+:is(.dt-home, .dt-player) #desktop-titlebar { background: #101216 !important; color: var(--cinema-muted); }
+:is(.dt-home, .dt-player) #desktop-titlebar i { background: var(--cinema-accent); }
+.dt-home .desktop-sidebar {
+    top: 42px;
+    left: 0;
+    bottom: 0;
+    border: 0;
+    border-right: 1px solid var(--cinema-line);
+    border-radius: 0;
+    background: #0e1013;
+    box-shadow: none;
+}
+.dt-home .dt-brand, .dt-home .dt-nav.active { color: var(--glass-text); }
+.dt-home .dt-brand > span {
+    width: 33px;
+    height: 33px;
+    border: 0;
+    border-radius: 10px;
+    color: #172925;
+    background: var(--cinema-accent);
+    box-shadow: none;
+}
+.dt-home .dt-nav { min-height: 42px; padding-block: 8px; border-radius: 24px; color: var(--cinema-muted); }
+.dt-home .dt-nav:hover { background: #ffffff10; color: var(--glass-text); }
+.dt-home .dt-nav.active::before { background: linear-gradient(#ffffff1c, #ffffff0d); border-color: var(--cinema-line); box-shadow: none; }
+body.dt-home > .container header { grid-template-columns: 1fr minmax(180px, 340px) auto; gap: 14px; }
+.dt-filters { display: flex; position: relative; align-self: start; gap: clamp(10px, 2vw, 25px); width: max-content; }
+.dt-filters button { padding: 12px 2px; white-space: nowrap; color: var(--cinema-muted); font-size: 14px; }
+.dt-filters button[aria-pressed="true"] { color: var(--glass-text); }
+.dt-filters span {
+    position: absolute;
+    bottom: 2px;
+    height: 2px;
+    width: var(--filter-width);
+    background: var(--cinema-accent);
+    transform: translateX(var(--filter-x));
+    transition: width 230ms ease, transform 230ms ease;
+}
+.dt-tools { align-self: start; margin-top: 3px; }
+.dt-tools button { display: grid; place-items: center; width: 43px; height: 43px; border: 1px solid var(--cinema-line); border-radius: 50%; background: #ffffff0e; }
+.dt-tools button:hover { background: #ffffff20; }
+.dt-tools svg { width: 19px; height: 19px; }
+.dt-home #searchArea > .w-full > .flex { background: #ffffff09 !important; border-color: var(--cinema-line) !important; box-shadow: none !important; }
+.dt-home #searchInput { background: transparent !important; color: var(--glass-text) !important; }
+.dt-home #searchInput::placeholder { color: var(--cinema-muted) !important; }
+.dt-home #searchArea button[aria-label="搜索按钮"] { background: #ffffff13 !important; color: var(--cinema-accent) !important; }
+.dt-home #recentSearches button { background: #ffffff10 !important; color: var(--cinema-muted) !important; border-color: var(--cinema-line) !important; }
+.dt-home .dt-hero {
+    display: grid;
+    align-items: end;
+    min-height: 345px;
+    background: #242b31 url('../image/cinema-feature.jpg') center 29% / cover no-repeat;
+    border-color: var(--cinema-line);
+    box-shadow: none;
+}
+.dt-home .dt-hero::before { background: linear-gradient(90deg, #101418 3%, #101418df 29%, #10141812 76%), linear-gradient(0deg, #101418a0, transparent 65%); }
+.dt-home .dt-hero-copy { padding: 32px clamp(22px, 4vw, 51px); }
+.dt-home .dt-eyebrow { margin-bottom: 5px; color: var(--cinema-accent); font-size: 13px; letter-spacing: 0; }
+.dt-home .dt-hero h2 { font-size: clamp(36px, 5vw, 64px); line-height: 1.14; font-weight: 750; letter-spacing: -.035em; }
+.dt-home .dt-hero p { font-size: 14px; }
+.dt-home .dt-hero-actions button:first-child { background: var(--cinema-accent); color: #172925; border-color: transparent; font-size: 14px; }
+.dt-home .dt-hero-actions button:first-child:hover { background: #e2f8f1; }
+.dt-home #doubanArea h2, .dt-home .dt-section-head h2 { color: var(--glass-text) !important; }
+.dt-home #doubanArea .rounded-full.bg-\[\#222\] { display: none; }
+.dt-home #douban-refresh, .dt-home .dt-section-head button { color: var(--cinema-accent) !important; }
+.dt-home #douban-tags button, .dt-home .dt-recommend-off button {
+    background: #ffffff0e !important;
+    color: var(--cinema-muted) !important;
+    border-color: var(--cinema-line) !important;
+}
+.dt-home #douban-tags button.bg-pink-600 { background: #c2eadf25 !important; color: var(--cinema-accent) !important; }
+.dt-home #douban-results { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+.dt-home #douban-results > div:not(.col-span-full):hover { transform: none !important; }
+.dt-home #douban-results > div:hover img { transform: none !important; }
+.dt-home #douban-results > div > div:first-child {
+    position: relative;
+    transform: perspective(900px);
+    transition: transform 360ms cubic-bezier(.2,.8,.2,1), box-shadow 280ms ease;
+}
+.dt-home #douban-results .dt-tilting > div:first-child {
+    transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) scale(1.025);
+    transition: transform 100ms linear, box-shadow 100ms linear;
+    box-shadow: 0 12px 25px #0008;
+}
+.dt-home #douban-results .dt-tilting > div:first-child:not(.dt-cover-empty)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at var(--light-x) var(--light-y), #fff4, transparent 55%);
+}
+.dt-home #douban-results .p-2 button, .dt-home .dt-resume-info strong { color: var(--glass-text) !important; }
+.dt-home :is(.dt-empty-history, .dt-resume-card, .dt-recommend-off, #results > div, #douban-results > .col-span-full) {
+    background: #ffffff09 !important;
+    color: var(--cinema-muted) !important;
+    border-color: var(--cinema-line) !important;
+    box-shadow: none !important;
+}
+.dt-home #results h3 { color: var(--glass-text) !important; }
+.dt-home #results p, .dt-home #douban-results > .col-span-full .text-gray-500 { color: var(--cinema-muted) !important; }
+.dt-home #results :is(.bg-\[\#222\], .bg-blue-500, .bg-purple-500) { background: #ffffff15 !important; color: var(--cinema-accent) !important; }
+.dt-home :is(#results, #douban-results) .dt-skeleton { background: linear-gradient(145deg, #24292f, #303840) !important; border-color: var(--cinema-line) !important; }
+.dt-home #douban-results .dt-cover-empty { background: linear-gradient(145deg, #24292f, #303840); }
+.dt-home #douban-results .dt-cover-empty::after { color: var(--cinema-muted); }
+.dt-home :is(.dt-resume-icon, .dt-progress) { background: #ffffff10; color: var(--cinema-accent); }
+.dt-home .dt-progress span { background: var(--cinema-accent); }
+.dt-home .dt-resume-info small, .dt-home .dt-recommend-off :is(strong, p) { color: var(--cinema-muted) !important; }
+.dt-home.dt-show-saved :is(.dt-discovery, #doubanArea, .dt-recommend-off, .dt-resume) { display: none !important; }
+.dt-saved h2 { font-size: 23px; margin: 0 0 16px; }
+.dt-saved-list { display: grid; gap: 8px; max-width: 620px; color: var(--cinema-muted); }
+.dt-saved-list button, .dt-save-button {
+    padding: 9px 14px;
+    border: 1px solid var(--cinema-line);
+    border-radius: 13px;
+    background: #ffffff0f;
+    color: var(--glass-text);
+    text-align: left;
+}
+.dt-saved-list button:hover, .dt-save-button:hover { background: #ffffff1f; }
+.dt-save-button { align-self: start; margin-bottom: 12px; }
+.dt-save-button[aria-pressed="true"] { color: var(--cinema-accent); border-color: var(--cinema-accent); }
+.dt-home > footer { border-color: var(--cinema-line) !important; }
+.dt-home > footer :is(p, a) { color: var(--cinema-muted) !important; }
+:is(.dt-home, .dt-player) #modal, .dt-home .dt-panel-backdrop { background: #080a0dbd !important; }
+:is(.dt-home, .dt-player) #modal > div,
+.dt-home :is(#settingsPanel, #historyPanel),
+.dt-home :is(#passwordModal, #disclaimerModal) > div {
+    background: var(--cinema-panel) !important;
+    color: var(--glass-text) !important;
+    border-color: var(--cinema-line) !important;
+    box-shadow: 0 20px 60px #0007 !important;
+}
+:is(.dt-home, .dt-player) #modal:not(.hidden) > div { animation: cinema-panel-in 300ms ease; }
+@keyframes cinema-panel-in { from { opacity: 0; transform: translateY(-4%); } }
+:is(.dt-home, .dt-player) #modal :is(.text-white, .text-gray-300, .text-gray-400),
+.dt-home :is(#settingsPanel, #historyPanel, #passwordModal, #disclaimerModal) :is(label, .text-white, .text-gray-300, .text-gray-400, .text-gray-500, .history-title, .history-meta, .history-time) {
+    color: var(--cinema-muted) !important;
+}
+.dt-home :is(#settingsPanel, #historyPanel) :is(button, input[type=text], select, #apiCheckboxes, .history-item, .bg-\[\#151515\], .bg-\[\#191919\]),
+:is(.dt-home, .dt-player) #modalContent button {
+    background: #2b3137 !important;
+    color: var(--glass-text) !important;
+    border-color: var(--cinema-line) !important;
+}
+.dt-player .player-header-fixed { background: #191d22 !important; border-color: var(--cinema-line) !important; color: var(--glass-text) !important; }
+.dt-player .player-header-fixed .gradient-text, .dt-player #videoTitle { color: var(--glass-text) !important; }
+.dt-player #playerContainer, .dt-player #playerContainer .player-container { background: #090b0e !important; border-color: var(--cinema-line) !important; box-shadow: none !important; }
+body.dt-player :is(button, .home-btn, #episodesList button, #episodeGrid button) {
+    background: #252a30 !important;
+    color: var(--glass-text) !important;
+    border-color: var(--cinema-line) !important;
+}
+body.dt-player :is(#episodesList, #episodeGrid) button.bg-blue-600 { background: var(--cinema-accent) !important; color: #172925 !important; }
+body.dt-player .art-video-player { --art-theme: #c2eadf !important; }
+body.dt-player .art-video-player button { background: transparent !important; border: 0 !important; color: white !important; }
+@media (max-width: 1100px) { .dt-home #douban-results { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
+@media (max-width: 760px) {
+    body.dt-home .desktop-sidebar { position: static; width: 100%; display: block; padding: 14px 16px 8px; border: 0; }
+    .dt-home .dt-brand { padding: 0 0 9px; font-size: 20px; }
+    .dt-home .desktop-sidebar nav { display: flex; flex-wrap: wrap; gap: 5px; }
+    .dt-home .dt-nav { width: auto; min-height: 35px; gap: 6px; padding: 5px 9px; margin: 0; }
+    .dt-home .dt-nav svg { width: 15px; height: 15px; }
+    body.dt-home > .container { padding: 13px 16px 22px !important; }
+    body.dt-home > .container header { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; }
+    .dt-home #searchArea { grid-column: 1 / -1; grid-row: 2; }
+    .dt-home .dt-tools { grid-column: 2; grid-row: 1; margin-top: 0; }
+    body.dt-home > div.fixed.top-4 { display: none !important; }
+    .dt-home .dt-hero { min-height: 275px; }
+    .dt-home .dt-hero::before { background: linear-gradient(90deg, #101418e8, #10141828), linear-gradient(0deg, #101418aa, transparent 70%); }
+    .dt-home #douban-results { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 12px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-filters span, .dt-home #douban-results > div > div:first-child { transition: none; }
+    :is(.dt-home, .dt-player) #modal:not(.hidden) > div { animation: none; }
+}

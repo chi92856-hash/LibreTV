@@ -534,32 +534,25 @@ function initPlayer(videoUrl) {
                 const hls = new Hls(hlsConfig);
                 currentHls = hls;
 
-                // 跟踪是否已经显示错误
-                let errorDisplayed = false;
-                // 跟踪是否有错误发生
+                // Only consecutive fatal failures consume the recovery budget.
                 let errorCount = 0;
-                // 跟踪视频是否开始播放
-                let playbackStarted = false;
-                // 跟踪视频是否出现bufferAppendError
-                let bufferAppendErrorCount = 0;
+                let lastProgressTime = video.currentTime;
 
                 // 监听视频播放事件
                 video.addEventListener('playing', function () {
-                    playbackStarted = true;
                     document.getElementById('player-loading').style.display = 'none';
                     document.getElementById('error').style.display = 'none';
                 });
 
                 // 监听视频进度事件
                 video.addEventListener('timeupdate', function () {
-                    if (video.currentTime > 1) {
-                        // 视频进度超过1秒，隐藏错误（如果存在）
+                    if (!video.paused && video.currentTime > lastProgressTime && video.currentTime - lastProgressTime < 2) {
+                        errorCount = 0;
+                        lastPlaybackError = '';
                         document.getElementById('error').style.display = 'none';
                     }
+                    lastProgressTime = video.currentTime;
                 });
-
-                hls.loadSource(url);
-                hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, function () {
                     video.play().catch(e => {
@@ -567,31 +560,19 @@ function initPlayer(videoUrl) {
                 });
 
                 hls.on(Hls.Events.ERROR, function (event, data) {
-                    // 增加错误计数
-                    errorCount++;
-
-                    // 处理bufferAppendError
-                    if (data.details === 'bufferAppendError') {
-                        bufferAppendErrorCount++;
-                        // 如果视频已经开始播放，则忽略这个错误
-                        if (playbackStarted) {
-                            return;
-                        }
-
-                        // 如果出现多次bufferAppendError但视频未播放，尝试恢复
-                        if (bufferAppendErrorCount >= 3) {
-                            hls.recoverMediaError();
-                        }
-                    }
-
+                    if (currentHls !== hls) return;
                     if (data.fatal) {
+                        errorCount++;
                         const status = data.response && data.response.code;
                         lastPlaybackError = 'HLS: ' + (data.details || data.type || '加载失败') + (status ? ' / HTTP ' + status : '');
                         if (errorCount <= 2) {
-                            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls.startLoad(); return; }
+                            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                                if (data.details === 'manifestLoadError' || data.details === 'manifestLoadTimeOut') hls.loadSource(url);
+                                else hls.startLoad(video.currentTime);
+                                return;
+                            }
                             if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
                         }
-                        errorDisplayed = true;
                         showError(lastPlaybackError + '，请重试或更换片源');
                         hls.stopLoad();
                     }
@@ -606,6 +587,8 @@ function initPlayer(videoUrl) {
                 hls.on(Hls.Events.LEVEL_LOADED, function () {
                     document.getElementById('player-loading').style.display = 'none';
                 });
+                hls.loadSource(url);
+                hls.attachMedia(video);
             }
         }
     });

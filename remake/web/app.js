@@ -387,8 +387,36 @@ function playEpisode(line, episode, position = 0, autoplay = true) {
   const isHls = /\.m3u8$/i.test(new URL(entry.url).pathname);
   if (isHls && !video.canPlayType('application/vnd.apple.mpegurl') && window.Hls?.isSupported()) {
     hls = new Hls();
-    hls.on(Hls.Events.ERROR, (_event, data) => {
-      if (data.fatal) status.textContent = '播放失败，请尝试切换线路。';
+    const activeHls = hls;
+    let failures = 0;
+    let lastTime = video.currentTime;
+    const onProgress = () => {
+      if (!video.paused && video.currentTime > lastTime && video.currentTime - lastTime < 2) {
+        failures = 0;
+        status.textContent = entry.title;
+      }
+      lastTime = video.currentTime;
+    };
+    video.addEventListener('timeupdate', onProgress);
+    activeHls.on(Hls.Events.DESTROYING, () => video.removeEventListener('timeupdate', onProgress));
+    activeHls.on(Hls.Events.ERROR, (_event, data) => {
+      if (hls !== activeHls || !data.fatal) return;
+      // Bound consecutive recovery attempts; successful playback renews the budget.
+      if (++failures <= 2) {
+        status.textContent = '连接中断，正在恢复播放…';
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          if (data.details === 'manifestLoadError' || data.details === 'manifestLoadTimeOut') activeHls.loadSource(entry.url);
+          else activeHls.startLoad(video.currentTime);
+          return;
+        }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          activeHls.recoverMediaError();
+          return;
+        }
+      }
+      const code = data.response?.code;
+      status.textContent = `播放源暂时无法连接${code ? `（HTTP ${code}）` : ''}，请重新选集重试或切换线路。`;
+      activeHls.stopLoad();
     });
     hls.loadSource(entry.url);
     hls.attachMedia(video);

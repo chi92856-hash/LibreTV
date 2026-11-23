@@ -1,5 +1,15 @@
 # LibreTV 新版
 
+## 电视端自动更新
+
+现有电视 APK 打开 `https://libretv-chi-am3.pages.dev/`。Cloudflare Pages 关联仓库 `main`，构建命令为 `node scripts/build-tv.cjs`，输出目录为 `dist-tv`，仓库根目录保持为空。
+
+推送 `main` 后自动构建并发布到同一网址。新版入口和脚本使用版本标记及重新验证缓存；已打开的页面每 5 分钟及恢复可见时检查更新，只在未播放且没有打开表单时刷新。发布失败时现有成功版本继续服务，不需要重装 APK。电视首次切到新版如提示访问密码，输入原网站密码；不会修改 Cloudflare 中的密码设置。
+
+线上 API 与桌面共用影片解析逻辑，云端只允许内置片源，不接收任意自定义上游地址。收藏与记录保存在设备本地，发布不会删除浏览器存储；旧界面和新版使用不同存储格式，旧记录不会自动转换。遥控器方向键可切换新版按钮焦点。
+
+本地检查：`node scripts/build-tv.cjs`、`node --test tests/tv-deployment.test.mjs tests/remake-interface.test.mjs tests/remake-recovery.test.mjs`。电视实际更新仍需电视联网并能访问该网址；APK 外壳或系统 WebView 自身的升级不属于网页自动更新。
+
 新版以 M HUB 的黑色工作台和胶囊控件为设计参考。发现页、搜索、片单、历史和播放工作台由本目录实现。
 
 Windows 桌面预览可在仓库根目录运行 `node remake/build-desktop.cjs`。脚本用本机已安装的 Electron 运行文件打包到 `.local-runtime/libretv-remake`。打开生成的 `LibreTV Remake.exe` 即可使用。另一种运行方式是在本目录安装 Electron 后执行 `npm run desktop`。

@@ -136,5 +136,13 @@
     <p class="status" id="tag-status" role="status"></p>
   </dialog>
   <output id="toast" role="status"></output>
+  <dialog id="site-login" aria-labelledby="site-login-title">
+    <form id="site-login-form">
+      <div class="dialog-head"><h2 id="site-login-title">网站访问密码</h2></div>
+      <p class="status">输入部署时设置的密码，验证成功后继续。</p>
+      <div class="input-row"><input id="site-password" type="password" aria-label="网站访问密码" autocomplete="current-password" required><button type="submit" class="primary">验证</button></div>
+      <p id="site-login-status" class="status" role="status"></p>
+    </form>
+  </dialog>
 </body>
 </html>

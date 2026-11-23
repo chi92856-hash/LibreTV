@@ -25,7 +25,7 @@ if (!fs.existsSync(executable)) {
     }
   }
 }
-for (const file of ['package.json', 'desktop.cjs', 'preload.cjs', 'server.cjs']) {
+for (const file of ['package.json', 'desktop.cjs', 'preload.cjs', 'server.cjs', 'catalog.cjs']) {
   fs.copyFileSync(path.join(__dirname, file), path.join(app, file));
 }
 fs.cpSync(path.join(__dirname, 'web'), path.join(app, 'web'), { recursive: true });

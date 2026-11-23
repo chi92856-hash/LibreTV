@@ -1,0 +1,15 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const root = path.resolve(__dirname, '..');
+const output = path.join(root, 'dist-tv');
+fs.mkdirSync(output, { recursive: true });
+fs.cpSync(path.join(root, 'remake/web'), output, { recursive: true });
+const version = crypto.createHash('sha256').update(['app.js', 'style.css', 'index.html'].map(file => fs.readFileSync(path.join(output, file))).join('')).digest('hex').slice(0, 16);
+let html = fs.readFileSync(path.join(output, 'index.html'), 'utf8');
+html = html.replace('<head>', `<head>\n  <meta name="libretv-version" content="${version}">`).replace('/style.css"', `/style.css?v=${version}"`).replace('/app.js"', `/app.js?v=${version}"`);
+fs.writeFileSync(path.join(output, 'index.html'), html);
+fs.writeFileSync(path.join(output, 'version.json'), JSON.stringify({ version }));
+fs.writeFileSync(path.join(output, '_worker.js'), "export { default } from '../remake/pages-worker.mjs';\n");
+fs.writeFileSync(path.join(output, '_routes.json'), JSON.stringify({ version: 1, include: ['/*'], exclude: [] }));
+console.log(`TV build ready: dist-tv / ${version}`);

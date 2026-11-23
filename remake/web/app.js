@@ -70,6 +70,8 @@ let searchRequest;
 let playback;
 let hls;
 let lastSave = 0;
+let accessHash = read('accessHash', localStorage.getItem('passwordHash') || localStorage.getItem('proxyAuthHash') || '');
+let accessRequest;
 
 function notify(message) {
   const toast = $('#toast');
@@ -255,8 +257,14 @@ function openSaved(item) {
   return openDetail(item, item);
 }
 async function get(path, signal, source) {
-  const headers = source ? { 'X-LibreTV-Endpoint': source.endpoint } : undefined;
+  const headers = source ? { 'X-LibreTV-Endpoint': source.endpoint } : {};
+  if (accessHash) headers['X-LibreTV-Auth'] = accessHash;
   const response = await fetch(path, { signal, headers });
+  if (response.status === 401) {
+    await requestAccess();
+    if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+    return get(path, signal, source);
+  }
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || '请求失败');
   return data;
@@ -784,3 +792,85 @@ document.querySelectorAll('.navigation button, .filters button, .settings-button
   for (const name of ['pointerleave', 'pointercancel', 'pointerdown', 'blur']) button.addEventListener(name, reset);
   motion.addEventListener('change', reset);
 });
+
+function requestAccess() {
+  if (accessRequest) return accessRequest.promise;
+  const dialog = $('#site-login');
+  let resolve, reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  accessRequest = { promise, resolve, reject };
+  dialog.showModal();
+  $('#site-password').focus();
+  return promise;
+}
+$('#site-login').addEventListener('cancel', () => {
+  accessRequest?.reject(new Error('访问密码验证已取消'));
+  accessRequest = null;
+});
+$('#site-login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button');
+  button.disabled = true;
+  const field = $('#site-password');
+  try {
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(field.value));
+    const candidate = Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+    const response = await fetch('/api/auth', { headers: { 'X-LibreTV-Auth': candidate }, cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error(response.status === 401 ? '密码不正确，请重试。' : '验证暂不可用，请稍后重试。');
+    accessHash = candidate;
+    write('accessHash', candidate);
+    field.value = '';
+    $('#site-login-status').textContent = '';
+    $('#site-login').close();
+    accessRequest?.resolve();
+    accessRequest = null;
+  } catch (error) {
+    $('#site-login-status').textContent = error.message;
+    field.focus();
+  } finally { button.disabled = false; }
+});
+
+// A deployed page updates only while idle; playback and open forms are never interrupted.
+const buildVersion = document.querySelector('meta[name="libretv-version"]')?.content;
+let checkingVersion = false;
+async function checkSiteUpdate() {
+  if (!buildVersion || checkingVersion || document.hidden || view === 'watch' || document.querySelector('dialog[open]')) return;
+  checkingVersion = true;
+  try {
+    const response = await fetch('/version.json', { cache: 'no-store' });
+    if (!response.ok) return;
+    const { version } = await response.json();
+    if (typeof version === 'string' && /^[a-f0-9]{16}$/.test(version) && version !== buildVersion && !document.hidden && view !== 'watch' && !document.querySelector('dialog[open]')) location.reload();
+  } catch { /* Keep the current page usable during temporary network failures. */ }
+  finally { checkingVersion = false; }
+}
+if (buildVersion) {
+  setInterval(checkSiteUpdate, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', checkSiteUpdate);
+  // TV remotes navigate the same real controls as keyboard and pointer users.
+  document.addEventListener('keydown', event => {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey) return;
+    const active = document.activeElement;
+    if (active?.matches('input, select, textarea, video') || active?.isContentEditable) return;
+    const dialogs = [...document.querySelectorAll('dialog[open]')];
+    const area = dialogs[dialogs.length - 1] || document;
+    const controls = [...area.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), video[controls]')].filter(element => element.getClientRects().length && !element.closest('[inert], [hidden]'));
+    if (!controls.length) return;
+    if (!controls.includes(active)) { event.preventDefault(); controls[0].focus(); return; }
+    const rect = active.getBoundingClientRect();
+    const cx = rect.x + rect.width / 2, cy = rect.y + rect.height / 2;
+    const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+    const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+    let target, best = Infinity;
+    for (const element of controls) {
+      if (element === active) continue;
+      const box = element.getBoundingClientRect();
+      const dx = box.x + box.width / 2 - cx, dy = box.y + box.height / 2 - cy;
+      const forward = (horizontal ? dx : dy) * direction;
+      if (forward < 2) continue;
+      const score = Math.hypot(dx, dy) + Math.abs(horizontal ? dy : dx) * 2;
+      if (score < best) { target = element; best = score; }
+    }
+    if (target) { event.preventDefault(); target.focus({ preventScroll: true }); target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+  });
+}

@@ -14,12 +14,11 @@
     <button class="brand glass" type="button" data-view="discover" aria-label="LibreTV 首页"><span data-icon="brand"></span>LibreTV</button>
     <nav class="glass navigation" aria-label="主导航">
       <button type="button" data-view="discover" aria-current="page"><span data-icon="compass"></span>发现</button>
-      <button type="button" data-view="history"><span data-icon="history"></span>历史</button>
       <button type="button" data-view="library"><span data-icon="bookmark"></span>片单</button>
+      <button type="button" data-view="history"><span data-icon="history"></span>观看记录</button>
     </nav>
     <div class="utilities glass">
-      <button type="button" class="icon-button" data-dialog="search" aria-label="搜索" title="搜索"><span data-icon="search"></span></button>
-      <button type="button" class="icon-button" data-dialog="settings" aria-label="设置" title="设置"><span data-icon="sliders"></span></button>
+      <button type="button" class="settings-button" data-dialog="settings"><span data-icon="sliders"></span>设置</button>
     </div>
     <div id="window-controls" class="window-controls" aria-label="窗口控制" hidden>
       <button type="button" class="glass icon-button" data-window="minimize" aria-label="最小化" title="最小化"><span data-icon="minus"></span></button>
@@ -28,6 +27,10 @@
     </div>
   </header>
   <main>
+    <div class="search-toolbar">
+      <button type="button" class="glass search-trigger" data-dialog="search"><span data-icon="search"></span><span>搜索电影、剧集</span><kbd>Ctrl K</kbd></button>
+      <button type="button" class="glass source-trigger" id="quick-source" aria-label="选择播放源">全部片源<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
     <section id="discover" aria-label="发现影片">
       <div class="feature-slot"><section class="feature" aria-label="精选推荐">
         <div class="feature-art"></div>
@@ -64,6 +67,10 @@
         <div id="catalog-empty" class="status" hidden>精选片库暂无匹配影片。<button type="button" id="search-tag" class="glass back">搜索此标签</button></div>
         <p class="status" id="recommend-status" role="status" hidden></p>
         <div class="posters" id="catalog" aria-live="polite"></div>
+      </section>
+      <section id="continue-watching" class="continue-section" hidden aria-labelledby="continue-title">
+        <div class="shelf-header"><h2 id="continue-title">继续观看</h2><button type="button" class="back" data-view="history">全部记录<span data-icon="right"></span></button></div>
+        <div id="continue-items" class="continue-items"></div>
       </section>
     </section>
     <section id="collection" hidden>

@@ -53,6 +53,7 @@ const video = $('#video');
 const searchDialog = $('#search');
 const settingsDialog = $('#settings');
 const tagDialog = $('#tag-dialog');
+const panelOrigins = new WeakMap();
 const searchInput = $('#search-form input');
 let view = 'discover';
 let previousView = 'discover';
@@ -80,21 +81,6 @@ function notify(message) {
 function titleMeta(item) {
   return [item.year, item.genre, item.provider].filter(Boolean).join(' · ');
 }
-function trackPoster(surface, area, maxX, maxY) {
-  area.addEventListener('pointermove', event => {
-    if (!motion.matches || !pointer.matches || event.pointerType !== 'mouse') return;
-    const bounds = area.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    const x = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-    surface.style.setProperty('--rx', `${(0.5 - y) * maxX}deg`);
-    surface.style.setProperty('--ry', `${(x - 0.5) * maxY}deg`);
-    surface.style.setProperty('--gx', `${x * 100}%`);
-    surface.style.setProperty('--gy', `${y * 100}%`);
-    surface.classList.add('tracking');
-  });
-  area.addEventListener('pointerleave', () => surface.classList.remove('tracking'));
-}
 function card(item, open, meta = titleMeta(item)) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -115,7 +101,6 @@ function card(item, open, meta = titleMeta(item)) {
   caption.textContent = meta;
   button.append(cover, title, caption);
   button.addEventListener('click', open);
-  trackPoster(button, button, 9, 12);
   return button;
 }
 function renderCatalog() {
@@ -221,6 +206,7 @@ function setView(next) {
     else button.removeAttribute('aria-current');
   });
   if (next === 'history' || next === 'library') renderCollection(next);
+  if (next === 'discover') renderContinueWatching();
   window.scrollTo(0, 0);
 }
 function renderCollection(next) {
@@ -228,6 +214,41 @@ function renderCollection(next) {
   $('#collection-title').textContent = next === 'history' ? '观看历史' : '我的片单';
   $('#collection-status').textContent = items.length ? `${items.length} 部影片` : next === 'history' ? '播放一部影片后，可以从这里接着看。' : '打开影片详情，即可加入片单。';
   $('#collection-items').replaceChildren(...items.map(item => card(item, () => openSaved(item), item.position ? `已观看 ${Math.floor(item.position / 60)} 分钟` : titleMeta(item))));
+}
+function renderContinueWatching() {
+  const items = [...history.values()].filter(item => item.position > 0).sort((a, b) => b.time - a.time).slice(0, 2);
+  $('#continue-watching').hidden = items.length === 0;
+  $('#continue-items').replaceChildren(...items.map(item => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'continue-item';
+    if (item.poster) {
+      const image = document.createElement('img');
+      image.src = item.poster;
+      image.alt = '';
+      image.addEventListener('error', () => image.remove(), { once: true });
+      button.append(image);
+    }
+    const copy = document.createElement('span');
+    copy.className = 'continue-copy';
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    const meta = document.createElement('small');
+    meta.textContent = `已观看 ${Math.floor(item.position / 60)} 分 ${Math.floor(item.position % 60)} 秒`;
+    copy.append(title, meta);
+    if (item.duration > 0) {
+      const progress = document.createElement('progress');
+      progress.max = item.duration;
+      progress.value = item.position;
+      progress.setAttribute('aria-label', `${item.title}观看进度`);
+      copy.append(progress);
+    }
+    const play = document.createElement('span');
+    draw(play, 'play');
+    button.append(copy, play);
+    button.addEventListener('click', () => openSaved(item));
+    return button;
+  }));
 }
 function openSaved(item) {
   if (item.direct) return openWatch(item, { resume: item.position || 0 });
@@ -241,7 +262,7 @@ async function get(path, signal, source) {
   return data;
 }
 function openSearch(title = '') {
-  if (!searchDialog.open) searchDialog.showModal();
+  if (!searchDialog.open) openPanel(searchDialog, document.activeElement);
   if (title) {
     searchInput.value = title;
     search(title);
@@ -317,7 +338,7 @@ function snapshot(item) {
 function saveProgress() {
   if (!playback?.started) return;
   const { item, line, episode } = playback;
-  history.set(keyFor(item), { ...snapshot(item), line, episode, position: video.currentTime || 0, time: Date.now() });
+  history.set(keyFor(item), { ...snapshot(item), line, episode, position: video.currentTime || 0, duration: Number.isFinite(video.duration) ? video.duration : 0, time: Date.now() });
   write('history', [...history].sort((a, b) => b[1].time - a[1].time).slice(0, 80));
 }
 function releaseMedia() {
@@ -466,8 +487,12 @@ document.querySelectorAll('[data-step]').forEach(button => button.addEventListen
 $('#feature-pause').addEventListener('click', () => { rotationPaused = !rotationPaused; updateRotation(); });
 $('#feature-search').addEventListener('click', () => openSearch(picks[featureIndex].title));
 $('[data-dialog="search"]').addEventListener('click', () => openSearch());
-$('[data-dialog="settings"]').addEventListener('click', () => settingsDialog.showModal());
-document.querySelectorAll('[data-dismiss]').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
+$('[data-dialog="settings"]').addEventListener('click', event => openPanel(settingsDialog, event.currentTarget));
+$('#quick-source').addEventListener('click', () => {
+  openPanel(settingsDialog, $('#quick-source'));
+  $('#source').focus();
+});
+document.querySelectorAll('[data-dismiss]').forEach(button => button.addEventListener('click', () => closePanel(button.closest('dialog'))));
 searchDialog.addEventListener('close', () => searchRequest?.abort());
 $('#search-form').addEventListener('submit', event => { event.preventDefault(); search(searchInput.value); });
 const sourceSelect = $('#source');
@@ -595,7 +620,7 @@ tagForm.addEventListener('submit', event => {
   renderTags();
   status.textContent = '标签已保存。';
 });
-$('#manage-tags').addEventListener('click', () => tagDialog.showModal());
+$('#manage-tags').addEventListener('click', event => openPanel(tagDialog, event.currentTarget));
 $('#search-tag').addEventListener('click', () => {
   const tag = findTag(kind);
   if (tag) openSearch(tag.name);
@@ -642,6 +667,120 @@ if (window.libreWindow) {
   });
 }
 showFeature(0);
-trackPoster($('.feature'), $('.feature-slot'), 4, 5);
 updateRotation();
 renderTags();
+renderContinueWatching();
+
+// The decorative capsule follows intent without changing the selected business value.
+function setupCapsule(group) {
+  const capsule = document.createElement('span');
+  capsule.className = 'selection-capsule';
+  capsule.setAttribute('aria-hidden', 'true');
+  group.append(capsule);
+  const state = [0, 0, 0, 0], velocity = [0, 0, 0, 0];
+  let target = state.slice(), frame = 0, previous = 0, initialized = false, hovered, focused;
+  const selected = () => group.querySelector('[aria-current="page"], [aria-pressed="true"]');
+  function paint(time) {
+    const dt = Math.min((time - previous) / 1000 || 1 / 60, .064);
+    previous = time;
+    let moving = false;
+    for (let i = 0; i < 4; i++) {
+      const delta = state[i] - target[i];
+      const impulse = velocity[i] + 24 * delta;
+      const decay = Math.exp(-24 * dt);
+      state[i] = target[i] + (delta + impulse * dt) * decay;
+      velocity[i] = (velocity[i] - 24 * impulse * dt) * decay;
+      if (Math.abs(state[i] - target[i]) > .05 || Math.abs(velocity[i]) > .1) moving = true;
+    }
+    const speed = Math.hypot(velocity[0], velocity[1]);
+    const stretch = Math.min(.08, speed / 6000);
+    const vertical = Math.abs(velocity[1]) > Math.abs(velocity[0]);
+    capsule.style.width = `${state[2]}px`;
+    capsule.style.height = `${state[3]}px`;
+    capsule.style.transform = `translate(${state[0]}px,${state[1]}px) scale(${vertical ? 1 - stretch / 2 : 1 + stretch},${vertical ? 1 + stretch : 1 - stretch / 2})`;
+    frame = moving && motion.matches ? requestAnimationFrame(paint) : 0;
+  }
+  function update() {
+    const button = focused || hovered || selected();
+    capsule.hidden = !button;
+    if (!button) return;
+    target = [button.offsetLeft, button.offsetTop, button.offsetWidth, button.offsetHeight];
+    if (!initialized || !motion.matches) {
+      state.splice(0, 4, ...target);
+      velocity.fill(0);
+      initialized = true;
+    }
+    if (!frame) { previous = 0; frame = requestAnimationFrame(paint); }
+  }
+  group.addEventListener('pointerover', event => {
+    if (pointer.matches && event.pointerType === 'mouse') { hovered = event.target.closest('button'); update(); }
+  });
+  group.addEventListener('pointerleave', () => { hovered = null; update(); });
+  group.addEventListener('focusin', event => { focused = event.target.closest('button'); update(); });
+  group.addEventListener('focusout', () => { focused = null; update(); });
+  new MutationObserver(update).observe(group, { attributes: true, subtree: true, attributeFilter: ['aria-current', 'aria-pressed'] });
+  const resize = new ResizeObserver(update);
+  resize.observe(group);
+  motion.addEventListener('change', update);
+  update();
+}
+document.querySelectorAll('.navigation, .filters').forEach(setupCapsule);
+function updateQuickSource() {
+  $('#quick-source').firstChild.textContent = sourceSelect.selectedOptions[0]?.textContent || '全部片源';
+}
+sourceSelect.addEventListener('change', updateQuickSource);
+new MutationObserver(updateQuickSource).observe(sourceSelect, { childList: true });
+updateQuickSource();
+
+function panelTransform(dialog, origin) {
+  const from = origin.getBoundingClientRect();
+  const to = dialog.getBoundingClientRect();
+  return `translate(${from.x + from.width / 2 - to.x - to.width / 2}px,${from.y + from.height / 2 - to.y - to.height / 2}px) scale(${Math.max(.05, from.width / to.width)},${Math.max(.05, from.height / to.height)})`;
+}
+function openPanel(dialog, origin) {
+  if (dialog.open) return;
+  const trigger = origin?.closest('button') || $('[data-dialog="search"]');
+  panelOrigins.set(dialog, trigger);
+  dialog.showModal();
+  if (!motion.matches) return;
+  dialog.getAnimations().forEach(animation => animation.cancel());
+  dialog.animate([{ transform: panelTransform(dialog, trigger), borderRadius: '28px', opacity: .5 }, { transform: 'none', borderRadius: '22px', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.16,1,.3,1)' });
+  for (const child of dialog.children) child.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, delay: 100, fill: 'backwards' });
+}
+async function closePanel(dialog) {
+  if (!dialog.open || dialog.inert) return;
+  const origin = panelOrigins.get(dialog);
+  if (motion.matches && origin?.isConnected) {
+    dialog.getAnimations().forEach(animation => animation.cancel());
+    dialog.inert = true;
+    const animation = dialog.animate([{ transform: 'none', opacity: 1 }, { transform: panelTransform(dialog, origin), opacity: 0, borderRadius: '28px' }], { duration: 240, easing: 'cubic-bezier(.4,0,.2,1)' });
+    try { await animation.finished; } catch { /* A navigation may close the dialog while it is animating. */ }
+    dialog.inert = false;
+  }
+  dialog.close();
+  if (origin?.isConnected) origin.focus({ preventScroll: true });
+}
+for (const dialog of [searchDialog, settingsDialog, tagDialog]) {
+  dialog.addEventListener('cancel', event => { event.preventDefault(); closePanel(dialog); });
+  dialog.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closePanel(dialog);
+  });
+}
+document.querySelectorAll('.navigation button, .filters button, .settings-button').forEach(button => {
+  const content = document.createElement('span');
+  content.className = 'button-content';
+  content.append(...button.childNodes);
+  button.append(content);
+  const reset = () => { content.style.transform = ''; };
+  button.addEventListener('pointermove', event => {
+    if (!motion.matches || !pointer.matches || event.pointerType !== 'mouse' || event.buttons) return;
+    const box = button.getBoundingClientRect();
+    const x = Math.max(-4, Math.min(4, (event.clientX - box.x - box.width / 2) * .1));
+    const y = Math.max(-3, Math.min(3, (event.clientY - box.y - box.height / 2) * .1));
+    content.style.transform = `translate(${x}px,${y}px)`;
+  });
+  for (const name of ['pointerleave', 'pointercancel', 'pointerdown', 'blur']) button.addEventListener(name, reset);
+  motion.addEventListener('change', reset);
+});

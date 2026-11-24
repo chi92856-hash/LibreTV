@@ -23,11 +23,20 @@ export async function handleApi(request, env) {
       const term = url.searchParams.get('q')?.trim();
       if (!term || term.length > 80) return json({ error: '请输入 1 到 80 个字符的片名' }, 400);
       if (source && !Object.hasOwn(sources, source)) return json({ error: '未知片源' }, 400);
-      const results = await Promise.allSettled((source ? [source] : Object.keys(sources)).map(async key => {
+      const keys = source ? [source] : Object.keys(sources);
+      const results = await Promise.allSettled(keys.map(async key => {
         const list = await query(sources[key].url, { wd: term });
         return list.map(item => normalize(item, key));
       }));
-      if (results.every(result => result.status === 'rejected')) return json({ error: '片源连接失败，请稍后重试' }, 502);
+      if (results.every(result => result.status === 'rejected')) {
+        const errors = results.map((result, index) => {
+          const message = result.reason?.message || '';
+          const safe = /^片源返回 HTTP \d{3}$|^片源未返回有效 JSON$|^片源返回格式不符$/.test(message) ? message :
+            ['TimeoutError', 'AbortError'].includes(result.reason?.name) ? '请求超时' : '云端请求失败';
+          return `${sources[keys[index]].name}：${safe}`;
+        });
+        return json({ error: `片源连接失败（${errors.join('；')}）` }, 502);
+      }
       return json({ items: results.flatMap(result => result.value || []), partial: results.some(result => result.status === 'rejected') });
     }
     if (url.pathname === '/api/detail') {
@@ -49,7 +58,7 @@ export async function handleApi(request, env) {
     if (url.pathname === '/api/recommend-cover') {
       const cover = new URL(url.searchParams.get('url') || 'https://invalid/');
       if (cover.protocol !== 'https:' || cover.port || cover.username || cover.password || !/^img\d+\.doubanio\.com$/.test(cover.hostname)) return json({ error: '封面地址无效' }, 400);
-      const image = await fetch(cover, { headers: { Referer: 'https://movie.douban.com/' }, redirect: 'error', signal: AbortSignal.timeout(7000) });
+      const image = await fetch(cover, { headers: { Referer: 'https://movie.douban.com/' }, redirect: 'manual', signal: AbortSignal.timeout(7000) });
       const type = image.headers.get('Content-Type') || '';
       if (!image.ok || !image.body || !/^image\/(jpeg|png|webp|avif)(?:;|$)/i.test(type)) return json({ error: '封面暂不可用' }, 502);
       return new Response(image.body, { headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=86400' } });

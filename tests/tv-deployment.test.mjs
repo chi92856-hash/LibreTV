@@ -22,7 +22,8 @@ test('hosted API preserves password protection and validates upstream selection'
 
 test('hosted search shares catalog normalization with the desktop server', async () => {
   const original = globalThis.fetch;
-  globalThis.fetch = async url => {
+  globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'manual', 'Cloudflare does not support redirect:error');
     assert.equal(new URL(url).searchParams.get('wd'), 'fixture');
     return Response.json({ list: [{ vod_id: 42, vod_name: 'Fixture movie', vod_pic: 'https://example.invalid/cover.jpg', vod_year: 2026 }] });
   };
@@ -33,6 +34,22 @@ test('hosted search shares catalog normalization with the desktop server', async
     assert.equal(data.items[0].id, '42');
     assert.equal(data.items[0].title, 'Fixture movie');
     assert.equal(data.items[0].source, 'lizi');
+  } finally { globalThis.fetch = original; }
+});
+
+test('hosted search rejects upstream redirects instead of following an untrusted target', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(options.redirect, 'manual');
+    calls++;
+    return new Response(null, { status: 302, headers: { Location: 'http://127.0.0.1/' } });
+  };
+  try {
+    const response = await handleApi(new Request('https://fixture.invalid/api/search?q=fixture&source=lizi'), {});
+    assert.equal(response.status, 502);
+    assert.equal(calls, 1);
+    assert.match((await response.json()).error, /HTTP 302/);
   } finally { globalThis.fetch = original; }
 });
 

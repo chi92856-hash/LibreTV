@@ -39,9 +39,12 @@ function episodes(item) {
 async function query(endpoint, params) {
   const url = new URL(endpoint);
   for (const [key, value] of Object.entries({ ac: 'detail', ...params })) url.searchParams.set(key, value);
-  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(8500) });
-  if (!response.ok) throw new Error('片源暂不可用');
-  const data = await response.json();
+  // Workers supports manual redirects, but rejects redirect:error before sending.
+  const response = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' }, redirect: 'manual', signal: AbortSignal.timeout(8500) });
+  if (!response.ok) throw new Error(`片源返回 HTTP ${response.status}`);
+  let data;
+  try { data = await response.json(); }
+  catch { throw new Error('片源未返回有效 JSON'); }
   if (!Array.isArray(data.list)) throw new Error('片源返回格式不符');
   return data.list;
 }
@@ -54,7 +57,7 @@ async function recommendations(kind, tag, offset) {
     endpoint.search = new URLSearchParams({ type, tag, sort: 'recommend', page_limit: limit, page_start: offset });
     const response = await fetch(endpoint, {
       headers: { Referer: 'https://movie.douban.com/', 'User-Agent': 'Mozilla/5.0' },
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(8000)
     });
     if (!response.ok) throw new Error('推荐暂不可用');

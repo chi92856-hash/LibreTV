@@ -30,7 +30,9 @@ function episodes(item) {
     const list = line.split('#').flatMap((entry, i) => {
       const separator = entry.indexOf('$');
       const url = mediaUrl(separator < 0 ? entry : entry.slice(separator + 1));
-      return url ? [{ title: separator < 0 ? `第 ${i + 1} 集` : entry.slice(0, separator), url }] : [];
+      // A provider's share page is HTML, not a playable media resource.
+      const playable = url && /\.(m3u8|mp4|webm|m4v|ogg|ogv)$/i.test(new URL(url).pathname);
+      return playable ? [{ title: separator < 0 ? `第 ${i + 1} 集` : entry.slice(0, separator), url }] : [];
     });
     return list.length ? [{ name: labels[index] || `线路 ${index + 1}`, episodes: list }] : [];
   });

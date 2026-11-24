@@ -374,7 +374,8 @@ function openWatch(item, resume = {}) {
   video.poster = item.poster || '';
   syncSave();
   renderEpisodes();
-  const position = line === resume.line && episode === resume.episode ? resume.position : resume.resume;
+  // Removing non-media lines may change a saved line index, but not its episode position.
+  const position = episode === resume.episode ? resume.position ?? resume.resume : resume.resume;
   if (item.lines.length) playEpisode(line, episode, position, false);
   else $('#play-status').textContent = '这个片源没有可用的播放线路。';
 }
@@ -431,7 +432,9 @@ function playEpisode(line, episode, position = 0, autoplay = true) {
     activeHls.on(Hls.Events.ERROR, (_event, data) => {
       if (hls !== activeHls || !data.fatal) return;
       // Bound consecutive recovery attempts; successful playback renews the budget.
-      if (++failures <= 2) {
+      const code = data.response?.code;
+      const permanent = code >= 400 && code < 500 && code !== 408 && code !== 429;
+      if (++failures <= 2 && !permanent) {
         status.textContent = '连接中断，正在恢复播放…';
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           if (data.details === 'manifestLoadError' || data.details === 'manifestLoadTimeOut') activeHls.loadSource(entry.url);
@@ -443,8 +446,7 @@ function playEpisode(line, episode, position = 0, autoplay = true) {
           return;
         }
       }
-      const code = data.response?.code;
-      status.textContent = `播放源暂时无法连接${code ? `（HTTP ${code}）` : ''}，请重新选集重试或切换线路。`;
+      status.textContent = `播放失败：${code ? `HTTP ${code}` : data.details || '视频加载或解码失败'}，请尝试其他片源。`;
       activeHls.stopLoad();
     });
     hls.loadSource(entry.url);
@@ -474,7 +476,11 @@ video.addEventListener('timeupdate', () => {
   if (Date.now() - lastSave > 4000) { lastSave = Date.now(); saveProgress(); }
 });
 video.addEventListener('pause', saveProgress);
-video.addEventListener('error', () => { if (playback) $('#play-status').textContent = '播放失败，请尝试切换线路。'; });
+video.addEventListener('error', () => {
+  if (!playback || !video.error) return;
+  const messages = { 1: '播放请求被中止', 2: '视频网络连接失败', 3: '视频解码失败，当前设备可能不支持该编码', 4: '播放地址不可用或不是有效视频' };
+  $('#play-status').textContent = `播放失败：${messages[video.error.code] || '未知媒体错误'}，请尝试其他片源。`;
+});
 video.addEventListener('ended', () => { if (settings.autoNext) nextEpisode(); });
 window.addEventListener('pagehide', saveProgress);
 
